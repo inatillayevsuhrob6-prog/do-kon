@@ -252,7 +252,42 @@ def pos():
     function cq(i,d){C[i].qty=Math.max(1,C[i].qty+d);rc()}function cc(){C=[];rc()}
     async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\\nYangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}
     function bp(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.1;o.start();o.stop(c.currentTime+.1)}catch{}}
-    function ss(){if(sc)return;sc=new Html5Qrcode("sr");sc.start({facingMode:{exact:"environment"}},{fps:20,qrbox:{width:280,height:120}},t=>{if(t!==ls){ls=t;ab(t);setTimeout(()=>ls='',600)}},()=>{}).then(()=>document.getElementById('sb').style.display='flex').catch(e=>{sc.start({facingMode:"environment"},{fps:20,qrbox:{width:280,height:120}},t=>{if(t!==ls){ls=t;ab(t);setTimeout(()=>ls='',600)}},()=>{}).then(()=>document.getElementById('sb').style.display='flex').catch(e2=>alert('Kamera xatosi: '+e2))})}
+    async function ss(){
+  if(sc) return;
+  const region = document.getElementById('sr');
+  region.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--dim)">📷 Kamera yuklanmoqda...</div>';
+  
+  // Eng yaxshi orqa kamerani topish
+  let cameras = [];
+  try { cameras = await Html5Qrcode.getCameras(); } catch(e) { alert('Kamera topilmadi: '+e); region.innerHTML=''; return; }
+  if(!cameras.length){ alert('Kamera yo\'q!'); region.innerHTML=''; return; }
+  
+  // Orqa kamerani tanlash (back/rear/environment)
+  let camId = cameras[0].id;
+  for(let c of cameras){ if(/back|rear|environment/i.test(c.label)){ camId=c.id; break; } }
+  
+  sc = new Html5Qrcode("sr");
+  const cfg = { fps: 25, qrbox: (w,h)=>({width:Math.min(w*0.9,400), height:Math.min(h*0.4,150)}), aspectRatio: 1.5, disableFlip: false, videoConstraints: { facingMode: { ideal: "environment" }, focusMode: "continuous", torch: false } };
+  
+  try {
+    await sc.start(camId, cfg, (txt)=>{
+      if(txt && txt!==ls){ ls=txt; ab(txt); navigator.vibrate&&navigator.vibrate(80); setTimeout(()=>ls='',700); }
+    }, ()=>{});
+    document.getElementById('sb').style.display='flex';
+  } catch(e1) {
+    // Fallback: oddiy rejim
+    try {
+      await sc.start({facingMode:"environment"}, {fps:20, qrbox:{width:300,height:130}}, (txt)=>{
+        if(txt && txt!==ls){ ls=txt; ab(txt); navigator.vibrate&&navigator.vibrate(80); setTimeout(()=>ls='',700); }
+      }, ()=>{});
+      document.getElementById('sb').style.display='flex';
+    } catch(e2) {
+      alert('❌ Kamera ochilmadi: '+e2+'\n\nRuxsat berganingizni tekshiring.');
+      region.innerHTML='<div style="padding:20px;text-align:center;color:var(--red)">Kamera ruxsati kerak</div>';
+      sc=null;
+    }
+  }
+}
     function xs(){if(sc){sc.stop().then(()=>{sc.clear();sc=null});document.getElementById('sb').style.display='none'}}
     function ms(){const v=document.getElementById('mb').value.trim();if(v){ab(v);document.getElementById('mb').value=''}}
     document.getElementById('mb').addEventListener('keydown',e=>{if(e.key==='Enter')ms()});
