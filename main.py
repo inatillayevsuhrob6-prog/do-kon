@@ -128,9 +128,19 @@ def db_create():
     pass_path = os.path.join(os.path.dirname(DB_PATH), db_name + ".pass")
     if os.path.exists(db_path):
         return db_error("Bu nom allaqachon mavjud! Ulanishdan foydalaning.")
+    pass_hash = hashlib.sha256(password.encode()).hexdigest()
     with open(pass_path, 'w') as f:
-        f.write(hashlib.sha256(password.encode()).hexdigest())
-    init_user_db(db_path)
+        f.write(pass_hash)
+    # Database yaratish va jadvallarni初始化
+    db = sqlite3.connect(db_path)
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, customer_phone TEXT, customer_name TEXT DEFAULT '', debt REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, product_id INTEGER NOT NULL, qty INTEGER NOT NULL, price REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS debts (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, total REAL DEFAULT 0, paid REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    """)
+    db.commit()
+    db.close()
     session['db_name'] = db_name
     session['db_message'] = "Database '" + db_name + "' yaratildi va ulandi!"
     return redirect("/dashboard")
