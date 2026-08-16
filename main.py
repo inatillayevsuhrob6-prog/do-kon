@@ -130,7 +130,40 @@ def product_delete(pid):
 
 @app.route("/pos")
 def pos():
-    return RP("""<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script><div style="padding:24px;max-width:1100px;margin:0 auto;"><h1 style="font-size:28px;margin-bottom:24px;">🛒 Kassa</h1><div class="grid g2"><div class="card"><h2 style="margin-bottom:16px;">📷 Professional Skaner</h2><div style="display:flex;gap:8px;margin-bottom:16px;"><input id="mb" class="input" placeholder="Barcode..." style="margin:0;"><button class="btn btn-primary" onclick="ms()">🔍</button></div><button class="btn btn-green" style="width:100%;" onclick="ss()">📷 Kamera</button><div id="sr" style="border-radius:12px;overflow:hidden;min-height:200px;background:#000;margin-top:12px;"></div><button class="btn btn-red" style="width:100%;margin-top:12px;display:none;" id="sb" onclick="xs()">⏹ Stop</button></div><div class="card"><div style="display:flex;justify-content:space-between;margin-bottom:16px;"><h2>🧺 Savat</h2><button class="btn btn-red btn-sm" onclick="cc()">🗑</button></div><div id="ct" style="min-height:200px;max-height:400px;overflow-y:auto;"></div><div class="total-bar"><div style="color:var(--dim);">JAMI</div><div class="total-amount" id="tt">0 so'm</div></div><label style="display:flex;align-items:center;gap:10px;margin-top:16px;"><input type="checkbox" id="snd" checked> 🔊 Ovoz</label><button class="btn btn-green" style="width:100%;padding:18px;margin-top:16px;" onclick="oc()">💳 To'lov</button></div></div></div><div id="cm" class="modal-overlay"><div class="modal"><h2 style="margin-bottom:20px;text-align:center;">💳 To'lov turi</h2><div class="grid g2"><button class="btn btn-green" style="padding:16px;" onclick="doPay('cash')">💵 Naqd</button><button class="btn btn-primary" style="padding:16px;" onclick="doPay('card')">💳 Karta</button><button class="btn btn-gray" style="padding:16px;" onclick="openCredit()">📝 Nasiya</button><button class="btn btn-gray" style="padding:16px;" onclick="doPay('mixed')">🔀 Aralash</button></div><button class="btn btn-red" style="width:100%;margin-top:12px;" onclick="xc()">Bekor</button></div></div><div id="crm" class="modal-overlay"><div class="modal"><h2 style="margin-bottom:20px;text-align:center;">📝 Nasiya ma'lumotlari</h2><input class="input" id="cf" placeholder="👤 Ism Familiya" style="margin-bottom:12px;"><input class="input" id="cp" placeholder="📱 Telefon" style="margin-bottom:16px;"><button class="btn btn-green" style="width:100%;padding:16px;margin-bottom:8px;" onclick="doPay('credit')">✅ Saqlash</button><button class="btn btn-gray" style="width:100%;" onclick="backToPayment()">← Orqaga</button></div></div><script>let C=[],sc=null,ls='';const F=n=>new Intl.NumberFormat('ru-RU').format(n);function rc(){const e=document.getElementById('ct');if(!C.length){e.innerHTML='<div style="text-align:center;color:var(--dim);padding:60px;">🛒 Savat bo\\'sh</div>';document.getElementById('tt').textContent='0 so\\'m';return}let h='',t=0;C.forEach((x,i)=>{const s=x.price*x.qty;t+=s;h+='<div class="cart-item"><div><div style="font-weight:600;">'+x.name+'</div><div style="color:var(--dim);font-size:12px;">'+F(x.price)+' × '+x.qty+'</div></div><div style="display:flex;gap:6px;align-items:center"><button class="qty-btn" onclick="cq('+i+',-1)">−</button><span style="min-width:32px;text-align:center;font-weight:700">'+x.qty+'</span><button class="qty-btn" onclick="cq('+i+',1)">+</button></div></div>'});e.innerHTML=h;document.getElementById('tt').textContent=F(t)+" so'm"}function cq(i,d){C[i].qty=Math.max(1,C[i].qty+d);rc()}function cc(){C=[];rc()}async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\\nYangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}function bp(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.1;o.start();o.stop(c.currentTime+.1)}catch{}}function ss(){if(sc)return;sc=new Html5Qrcode("sr");sc.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:150}},function(txt){if(txt&&txt!==ls){ls=txt;ab(txt);setTimeout(function(){ls='';},800);}},function(){}).then(function(){document.getElementById('sb').style.display='flex'}).catch(function(e){alert('Kamera xatosi: '+e);sc=null})}function xs(){if(sc){sc.stop().then(function(){sc.clear();sc=null});document.getElementById('sb').style.display='none'}}function ms(){const v=document.getElementById('mb').value.trim();if(v){ab(v);document.getElementById('mb').value=''}}document.getElementById('mb').addEventListener('keydown',function(e){if(e.key==='Enter')ms()});function oc(){if(!C.length){alert('Savat bo\\'sh!');return}document.getElementById('cm').classList.add('active')}function xc(){document.getElementById('cm').classList.remove('active')}function openCredit(){document.getElementById('cm').classList.remove('active');document.getElementById('crm').classList.add('active')}function backToPayment(){document.getElementById('crm').classList.remove('active');document.getElementById('cm').classList.add('active')}async function doPay(t){let ph='',fn='';if(t==='credit'){fn=document.getElementById('cf').value.trim();ph=document.getElementById('cp').value.trim();if(!fn||!ph){alert('Ism va telefonni kiriting!');return}document.getElementById('crm').classList.remove('active')}const body={items:C.map(function(x){return{product_id:x.id,qty:x.qty}}),payment:t,customer_phone:ph,customer_name:fn};try{const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Xato');alert('✅ Chek #'+d.sale_id+'\\nJami: '+F(d.total)+' so\\'m');C=[];rc();xc();document.getElementById('cp').value='';document.getElementById('cf').value='';window.open('/sales/'+d.sale_id+'/receipt','_blank')}catch(e){alert('❌ '+e.message)}}rc()</script>""")
+    return RP("""<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script><div style="padding:24px;max-width:1100px;margin:0 auto;"><h1 style="font-size:28px;margin-bottom:24px;">🛒 Kassa</h1><div class="grid g2"><div class="card"><h2 style="margin-bottom:16px;">📷 Professional Skaner</h2><div style="display:flex;gap:8px;margin-bottom:16px;"><input id="mb" class="input" placeholder="Barcode..." style="margin:0;"><button class="btn btn-primary" onclick="ms()">🔍</button></div><button class="btn btn-green" style="width:100%;" onclick="ss()">📷 Kamera</button><div id="sr" style="border-radius:12px;overflow:hidden;min-height:200px;background:#000;margin-top:12px;"></div><button class="btn btn-red" style="width:100%;margin-top:12px;display:none;" id="sb" onclick="xs()">⏹ Stop</button></div><div class="card"><div style="display:flex;justify-content:space-between;margin-bottom:16px;"><h2>🧺 Savat</h2><button class="btn btn-red btn-sm" onclick="cc()">🗑</button></div><div id="ct" style="min-height:200px;max-height:400px;overflow-y:auto;"></div><div class="total-bar"><div style="color:var(--dim);">JAMI</div><div class="total-amount" id="tt">0 so'm</div></div><label style="display:flex;align-items:center;gap:10px;margin-top:16px;"><input type="checkbox" id="snd" checked> 🔊 Ovoz</label><button class="btn btn-green" style="width:100%;padding:18px;margin-top:16px;" onclick="oc()">💳 To'lov</button></div></div></div><div id="cm" class="modal-overlay"><div class="modal"><h2 style="margin-bottom:20px;text-align:center;">💳 To'lov turi</h2><div class="grid g2"><button class="btn btn-green" style="padding:16px;" onclick="doPay('cash')">💵 Naqd</button><button class="btn btn-primary" style="padding:16px;" onclick="doPay('card')">💳 Karta</button><button class="btn btn-gray" style="padding:16px;" onclick="openCredit()">📝 Nasiya</button><button class="btn btn-gray" style="padding:16px;" onclick="doPay('mixed')">🔀 Aralash</button></div><button class="btn btn-red" style="width:100%;margin-top:12px;" onclick="xc()">Bekor</button></div></div><div id="crm" class="modal-overlay"><div class="modal"><h2 style="margin-bottom:20px;text-align:center;">📝 Nasiya ma'lumotlari</h2><input class="input" id="cf" placeholder="👤 Ism Familiya" style="margin-bottom:12px;"><input class="input" id="cp" placeholder="📱 Telefon" style="margin-bottom:16px;"><button class="btn btn-green" style="width:100%;padding:16px;margin-bottom:8px;" onclick="doPay('credit')">✅ Saqlash</button><button class="btn btn-gray" style="width:100%;" onclick="backToPayment()">← Orqaga</button></div></div><script>let C=[],sc=null,ls='';const F=n=>new Intl.NumberFormat('ru-RU').format(n);function rc(){const e=document.getElementById('ct');if(!C.length){e.innerHTML='<div style="text-align:center;color:var(--dim);padding:60px;">🛒 Savat bo\\'sh</div>';document.getElementById('tt').textContent='0 so\\'m';return}let h='',t=0;C.forEach((x,i)=>{const s=x.price*x.qty;t+=s;h+='<div class="cart-item"><div><div style="font-weight:600;">'+x.name+'</div><div style="color:var(--dim);font-size:12px;">'+F(x.price)+' × '+x.qty+'</div></div><div style="display:flex;gap:6px;align-items:center"><button class="qty-btn" onclick="cq('+i+',-1)">−</button><span style="min-width:32px;text-align:center;font-weight:700">'+x.qty+'</span><button class="qty-btn" onclick="cq('+i+',1)">+</button></div></div>'});e.innerHTML=h;document.getElementById('tt').textContent=F(t)+" so'm"}function cq(i,d){C[i].qty=Math.max(1,C[i].qty+d);rc()}function cc(){C=[];rc()}async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\\nYangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}function bp(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.1;o.start();o.stop(c.currentTime+.1)}catch{}}async function ss(){
+if(sc) return;
+const region = document.getElementById('sr');
+region.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--dim)">📷 Kamera yuklanmoqda...</div>';
+sc = new Html5Qrcode("sr");
+let cams = [];
+try { cams = await Html5Qrcode.getCameras(); } catch(e) {}
+let camId = null;
+if(cams.length){
+  camId = cams[0].id;
+  for(const c of cams){ if(/back|rear|environment|orqa/i.test(c.label||'')){ camId = c.id; break; } }
+}
+const onOk = function(txt){ if(txt && txt!==ls){ ls=txt; ab(txt); if(navigator.vibrate) navigator.vibrate(80); setTimeout(function(){ls='';},700);} };
+const onErr = function(){};
+const hq = {
+  fps: 60,
+  qrbox: { width: 260, height: 140 },
+  videoConstraints: {
+    facingMode: { ideal: "environment" },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    frameRate: { ideal: 60 },
+    advanced: [{ focusMode: "continuous" }]
+  }
+};
+let ok = false;
+if(camId){ try { await sc.start(camId, hq, onOk, onErr); ok = true; } catch(e){} }
+if(!ok){ try { await sc.start({facingMode:{ideal:"environment"}}, hq, onOk, onErr); ok = true; } catch(e){} }
+if(!ok){ try { await sc.start({facingMode:"environment"}, {fps:30, qrbox:{width:250,height:140}}, onOk, onErr); ok = true; } catch(e){} }
+if(!ok && cams.length){ try { await sc.start(cams[0].id, {fps:30, qrbox:{width:250,height:140}}, onOk, onErr); ok = true; } catch(e){} }
+if(!ok){ sc=null; region.innerHTML='<div style="padding:20px;text-align:center;color:var(--red)">❌ Kamera ruxsati kerak</div>'; alert('Kamera ochilmadi'); return; }
+try { await sc.applyVideoConstraints({ advanced: [{ torch: true, focusMode: "continuous" }] }); } catch(e){}
+document.getElementById('sb').style.display='flex';
+}function xs(){if(sc){sc.stop().then(function(){sc.clear();sc=null});document.getElementById('sb').style.display='none'}}function ms(){const v=document.getElementById('mb').value.trim();if(v){ab(v);document.getElementById('mb').value=''}}document.getElementById('mb').addEventListener('keydown',function(e){if(e.key==='Enter')ms()});function oc(){if(!C.length){alert('Savat bo\\'sh!');return}document.getElementById('cm').classList.add('active')}function xc(){document.getElementById('cm').classList.remove('active')}function openCredit(){document.getElementById('cm').classList.remove('active');document.getElementById('crm').classList.add('active')}function backToPayment(){document.getElementById('crm').classList.remove('active');document.getElementById('cm').classList.add('active')}async function doPay(t){let ph='',fn='';if(t==='credit'){fn=document.getElementById('cf').value.trim();ph=document.getElementById('cp').value.trim();if(!fn||!ph){alert('Ism va telefonni kiriting!');return}document.getElementById('crm').classList.remove('active')}const body={items:C.map(function(x){return{product_id:x.id,qty:x.qty}}),payment:t,customer_phone:ph,customer_name:fn};try{const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Xato');alert('✅ Chek #'+d.sale_id+'\\nJami: '+F(d.total)+' so\\'m');C=[];rc();xc();document.getElementById('cp').value='';document.getElementById('cf').value='';window.open('/sales/'+d.sale_id+'/receipt','_blank')}catch(e){alert('❌ '+e.message)}}rc()</script>""")
 
 @app.route("/api/product/by-barcode")
 def api_pbc():
@@ -236,7 +269,111 @@ def receipt(sid):
             return send_file(buf, download_name=f"chek-{sid}.pdf", mimetype="application/pdf")
         except:
             return "PDF xatosi", 500
-    return render_template_string("""<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Chek #{{s.id}}</title><style>body{background:#fff;color:#000;font-family:'Courier New',monospace}.rc{max-width:380px;margin:20px auto;padding:30px;border:2px dashed #333}.rc h1{text-align:center;font-size:22px}.rc hr{border:none;border-top:1px dashed #999;margin:12px 0}.it{display:flex;justify-content:space-between;font-size:13px;padding:3px 0}.tl{font-size:20px;font-weight:bold;display:flex;justify-content:space-between;margin-top:12px}.np{text-align:center;padding:16px;background:#0a0e1a}.np button,.np a{padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:14px;margin:4px;text-decoration:none;display:inline-block;color:#fff}@media print{.np{display:none}.rc{border:none}}</style></head><body><div class="np"><button onclick="window.print()" style="background:#3b82f6">🖨 Chop</button><a href="/sales/{{s.id}}/receipt?format=pdf" style="background:#10b981">📥 PDF</a><button onclick="window.close()" style="background:#ef4444">✖</button></div><div class="rc"><h1>🏪 SMARTSTORE</h1><div style="text-align:center;font-size:12px;color:#666;margin-bottom:16px">#{{s.id}} {{s.created_at[:19]}}</div><hr>{%for it in items%}<div class="it"><span>{{it.name}}</span><span>{{it.qty}}x{{'{:,.0f}'.format(it.price)}}</span></div><div class="it" style="justify-content:flex-end;font-weight:700"><span>{{'{:,.0f}'.format(it.qty*it.price)}}</span></div>{%endfor%}<hr><div class="tl"><span>JAMI:</span><span>{{'{:,.0f}'.format(s.total)}} so'm</span></div><div class="it" style="margin-top:8px"><span>To'lov:</span><span>{{s.payment|upper}}</span></div>{%if s.customer_name%}<div class="it"><span>Mijoz:</span><span><strong>{{s.customer_name}}</strong></span></div>{%endif%}{%if s.customer_phone%}<div class="it"><span>Telefon:</span><span>{{s.customer_phone}}</span></div>{%endif%}{%if s.debt>0%}<div class="it" style="color:red"><span>Qarz:</span><span><strong>{{'{:,.0f}'.format(s.debt)}} so'm</strong></span></div>{%endif%}<hr><div style="text-align:center;font-size:12px">Rahmat! 🙏</div></div></body></html>""", s=s, items=items)
+    return render_template_string("""<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Chek #{{s.id}}</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+body{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;font-family:'Inter',sans-serif;padding:0;margin:0}
+.np{position:fixed;top:20px;left:0;right:0;text-align:center;z-index:10;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 16px}
+.np button,.np a{padding:12px 24px;border:none;border-radius:12px;cursor:pointer;font-size:14px;font-weight:600;text-decoration:none;color:#fff;box-shadow:0 4px 15px rgba(0,0,0,.2);transition:.2s}
+.np button:hover,.np a:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.3)}
+.rc{max-width:420px;margin:100px auto 40px;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:0}
+.header{background:linear-gradient(135deg,#3b82f6,#10b981);padding:32px 28px;color:#fff;text-align:center}
+.header h1{font-size:28px;font-weight:900;margin:0;letter-spacing:-0.5px}
+.header .sub{font-size:12px;opacity:.9;margin-top:6px}
+.header .id{font-size:16px;font-weight:700;margin-top:12px;background:rgba(255,255,255,.2);display:inline-block;padding:6px 16px;border-radius:999px}
+.body{padding:28px}
+.items{margin-bottom:20px}
+.item{padding:14px 0;border-bottom:1px solid #f1f5f9;display:flex;flex-direction:column;gap:4px}
+.item:last-child{border-bottom:none}
+.item-top{display:flex;justify-content:space-between;align-items:start;gap:12px}
+.item-name{font-weight:600;font-size:15px;color:#0f172a;flex:1}
+.item-subtotal{font-weight:700;color:#10b981;font-size:15px;white-space:nowrap}
+.item-detail{font-size:12px;color:#64748b}
+.total-section{background:#f8fafc;margin:0 -28px;padding:24px 28px;border-top:2px dashed #e2e8f0}
+.total-row{display:flex;justify-content:space-between;padding:4px 0;font-size:14px;color:#64748b}
+.total-row.grand{font-size:24px;font-weight:900;color:#0f172a;padding:12px 0 0;margin-top:8px;border-top:1px solid #e2e8f0}
+.total-row.grand .amount{color:#10b981}
+.info{margin-top:20px;padding:16px;background:#f1f5f9;border-radius:12px}
+.info-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px}
+.info-row .label{color:#64748b}
+.info-row .value{font-weight:600;color:#0f172a}
+.debt-box{margin-top:16px;padding:14px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;text-align:center;border:2px solid #f59e0b}
+.debt-box .label{font-size:12px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.debt-box .amount{font-size:24px;font-weight:900;color:#b45309;margin-top:4px}
+.footer{text-align:center;padding:24px;color:#94a3b8;font-size:12px;background:#0f172a;color:#94a3b8}
+.footer .emoji{font-size:32px;display:block;margin-bottom:8px}
+.payment-badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.payment-badge.cash{background:#d1fae5;color:#065f46}
+.payment-badge.card{background:#dbeafe;color:#1e40af}
+.payment-badge.credit{background:#fee2e2;color:#991b1b}
+.payment-badge.mixed{background:#fef3c7;color:#92400e}
+@media print{
+  body{background:#fff;padding:0}
+  .np{display:none!important}
+  .rc{margin:0;box-shadow:none;border-radius:0;max-width:100%}
+  .header{border-radius:0}
+}
+@media(max-width:500px){
+  .rc{margin:80px 12px 20px}
+  .np{top:10px}
+  .np button,.np a{padding:10px 16px;font-size:13px}
+}
+</style></head><body>
+<div class="np">
+<button onclick="window.print()" style="background:linear-gradient(135deg,#3b82f6,#2563eb)">🖨 Chop etish</button>
+<a href="/sales/{{s.id}}/receipt?format=pdf" style="background:linear-gradient(135deg,#10b981,#059669)">📥 PDF yuklash</a>
+<button onclick="window.close()" style="background:linear-gradient(135deg,#ef4444,#dc2626)">✖ Yopish</button>
+</div>
+<div class="rc">
+<div class="header">
+  <h1>🏪 SMARTSTORE</h1>
+  <div class="sub">Chek • {{s.created_at[:19]}}</div>
+  <div class="id">#{{ '{:06d}'.format(s.id) }}</div>
+</div>
+<div class="body">
+  <div class="items">
+  {%for it in items%}
+  <div class="item">
+    <div class="item-top">
+      <span class="item-name">{{it.name}}</span>
+      <span class="item-subtotal">{{'{:,.0f}'.format(it.qty*it.price)}} so'm</span>
+    </div>
+    <div class="item-detail">{{it.qty}} × {{'{:,.0f}'.format(it.price)}} so'm</div>
+  </div>
+  {%endfor%}
+  </div>
+  <div class="total-section">
+    <div class="total-row"><span>Mahsulotlar soni</span><span>{{items|length}} ta</span></div>
+    <div class="total-row"><span>Jami miqdor</span><span>{% set ns = namespace(q=0) %}{% for it in items %}{% set ns.q = ns.q + it.qty %}{% endfor %}{{ns.q}} dona</span></div>
+    <div class="total-row grand"><span>JAMI:</span><span class="amount">{{'{:,.0f}'.format(s.total)}} so'm</span></div>
+  </div>
+  <div class="info">
+    <div class="info-row"><span class="label">To'lov turi</span>
+      <span class="value">
+        {%if s.payment=='cash'%}<span class="payment-badge cash">💵 NAQD</span>
+        {%elif s.payment=='card'%}<span class="payment-badge card">💳 KARTA</span>
+        {%elif s.payment=='credit'%}<span class="payment-badge credit">📝 NASIYA</span>
+        {%else%}<span class="payment-badge mixed">🔀 ARALASH</span>{%endif%}
+      </span>
+    </div>
+    {%if s.customer_name%}<div class="info-row"><span class="label">Mijoz</span><span class="value">{{s.customer_name}}</span></div>{%endif%}
+    {%if s.customer_phone%}<div class="info-row"><span class="label">📱 Telefon</span><span class="value">{{s.customer_phone}}</span></div>{%endif%}
+    <div class="info-row"><span class="label">Chek raqami</span><span class="value">#{{ '{:06d}'.format(s.id) }}</span></div>
+  </div>
+  {%if s.debt>0%}
+  <div class="debt-box">
+    <div class="label">⚠️ QARZ</div>
+    <div class="amount">{{'{:,.0f}'.format(s.debt)}} so'm</div>
+  </div>
+  {%endif%}
+</div>
+<div class="footer">
+  <span class="emoji">🙏</span>
+  <div>Xaridingiz uchun rahmat!</div>
+  <div style="margin-top:8px;opacity:.7;">SmartStore POS © 2026</div>
+</div>
+</div>
+</body></html>""", s=s, items=items)
 
 @app.route("/debts")
 def debts_page():
