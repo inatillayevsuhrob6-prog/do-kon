@@ -234,26 +234,23 @@ def dashboard():
     top = db.execute("SELECT p.name,SUM(si.qty) t FROM sale_items si JOIN products p ON p.id=si.product_id GROUP BY si.product_id ORDER BY t DESC LIMIT 5").fetchall()
     
     db_msg = session.pop('db_message', None)
-    banner = ""
+    banner_html = ""
     if db_msg:
-        banner = f'<div class="success-banner"><span style="font-size:28px;">🗄️</span><span style="font-size:16px;font-weight:700;color:var(--green);">{db_msg}</span></div>'
+        banner_html = '<div class="success-banner"><span style="font-size:28px;">🗄️</span><span style="font-size:16px;font-weight:700;color:var(--green);">' + db_msg + '</span></div>'
     
-    return RP(f"""<div style="padding:24px;max-width:1400px;margin:0 auto;">
-    {banner}
+    return RP(banner_html + """<div style="padding:24px;max-width:1400px;margin:0 auto;">
     <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">📊 Dashboard</h1>
     <div class="grid g4" style="margin-bottom:24px;">
-        <div class="stat-card"><div class="stat-label">💰 Bugungi savdo</div><div class="stat-value">{{"{{:,.0f}}".format(ts)}}</div></div>
+        <div class="stat-card"><div class="stat-label">💰 Bugungi savdo</div><div class="stat-value">{{"{:,.0f}".format(ts)}}</div></div>
         <div class="stat-card green"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{tc}}</div></div>
         <div class="stat-card yellow"><div class="stat-label">📦 Mahsulotlar</div><div class="stat-value">{{tp}}</div></div>
         <div class="stat-card red"><div class="stat-label">⚠️ Kam qoldiq</div><div class="stat-value">{{ls}}</div></div>
     </div>
     <div class="grid g2">
-        <div class="card"><h2 style="margin-bottom:16px;font-size:18px;">🏆 Top 5</h2>
-            {{"%for p in top%}}<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>{{{{p.name}}}}</span><span class="badge badge-blue">{{{{p.t}}}} dona</span></div>{{"{"}}%else%}{{"}"}}<p style="color:var(--dim);text-align:center;padding:20px;">Hali savdo yo'q</p>{{"{"}}%endfor%}{{"}"}}</div>
-        <div class="card"><h2 style="margin-bottom:16px;font-size:18px;">📈 7 kunlik</h2>
-            {{"%for s in ws%}}<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--dim);font-size:13px;">{{{{s.d}}}}</span><span style="color:var(--green);font-weight:700;">{{"{{:,.0f}}"}}.format(s.s)</span></div>{{"{"}}%endfor%}{{"}"}}</div>
+        <div class="card"><h2 style="margin-bottom:16px;font-size:18px;">🏆 Top 5</h2>{%for p in top%}<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>{{p.name}}</span><span class="badge badge-blue">{{p.t}} dona</span></div>{%else%}<p style="color:var(--dim);text-align:center;padding:20px;">Hali savdo yo'q</p>{%endfor%}</div>
+        <div class="card"><h2 style="margin-bottom:16px;font-size:18px;">📈 7 kunlik</h2>{%for s in ws%}<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--dim);font-size:13px;">{{s.d}}</span><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(s.s)}}</span></div>{%endfor%}</div>
     </div>
-    {{"%if td>0%}}<div class="card" style="margin-top:24px;border-color:rgba(245,158,11,.3);"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:14px;color:var(--dim);">💸 Jami qarz</div><div style="font-size:28px;font-weight:800;color:var(--yellow);margin-top:4px;">{{"{{:,.0f}}"}}.format(td) so'm</div></div><a href="/debts" class="btn btn-primary">Qarzdorlar →</a></div></div>{{"{"}}%endif%}{{"}"}}</div>""", ts=ts, tc=tc, tp=tp, ls=ls, td=td, ws=ws, top=top)
+    {%if td>0%}<div class="card" style="margin-top:24px;border-color:rgba(245,158,11,.3);"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:14px;color:var(--dim);">💸 Jami qarz</div><div style="font-size:28px;font-weight:800;color:var(--yellow);margin-top:4px;">{{"{:,.0f}".format(td)}} so'm</div></div><a href="/debts" class="btn btn-primary">Qarzdorlar →</a></div></div>{%endif%}</div>""", ts=ts, tc=tc, tp=tp, ls=ls, td=td, ws=ws, top=top)
 
 @app.route("/products")
 def products_list():
