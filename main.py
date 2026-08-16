@@ -9,6 +9,10 @@ DB_PATH = "/tmp/smartstore.db" if os.environ.get("RENDER") else os.path.join(os.
 app = Flask(__name__)
 app.secret_key = "smartstore-2024"
 
+# 🔐 RUXSAT BERILGAN TELEGRAM ID'LAR (faqat shular kira oladi)
+ALLOWED_IDS = [8317982282]  # ← O'z ID'laringizni shu yerga qo'shing
+# Masalan: ALLOWED_IDS = [8317982282, 123456789, 987654321]
+
 def get_db():
     if "db" not in g:
         g.db = sqlite3.connect(DB_PATH)
@@ -81,7 +85,11 @@ def login():
     if request.method == "POST":
         tg_id = request.form.get("tg_id", "").strip()
         if tg_id.isdigit():
-            session["tg_user"] = int(tg_id)
+            uid = int(tg_id)
+            # 🔒 ID TEKSHIRUV
+            if uid not in ALLOWED_IDS:
+                return render_template_string("""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Login</title>""" + "<style>" + CSS + """</style></head><body><div style="padding:24px;max-width:500px;margin:60px auto;"><div class='card' style='text-align:center;padding:40px;'><div style='font-size:64px;margin-bottom:20px;'>🚫</div><h1 style='font-size:32px;margin-bottom:12px;color:var(--red);'>Kirish taqiqlangan!</h1><p style='color:var(--dim);margin-bottom:16px;font-size:16px;'>Sizning ID: <strong style="color:#fff;">{}</strong></p><p style='color:var(--dim);margin-bottom:32px;font-size:14px;'>Bu tizim faqat ruxsat berilgan foydalanuvchilar uchun.<br>Administrator bilan bog'laning.</p><a href='/login' class='btn btn-primary' style='padding:18px;font-size:18px;'>← Orqaga</a></div></div></body></html>""".format(uid))
+            session["tg_user"] = uid
             return redirect("/dashboard?tg_user=" + tg_id)
         return "❌ Noto'g'ri ID", 400
     return RP("""<div style="padding:24px;max-width:500px;margin:60px auto;"><div class="card" style="text-align:center;padding:40px;">
@@ -527,9 +535,31 @@ def start_bot_thread():
         
         async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = update.effective_user
-            app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))], [InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
-            await update.message.reply_html("👋 <b>{}</b>\n\n🏪 SmartStore POS\n\n👇 Ilovaga o'ting:".format(user.full_name), reply_markup=kb)
+            user_id = user.id
+            
+            # 🔒 ID TEKSHIRUV - faqat ruxsat berilganlar kira oladi
+            if user_id not in ALLOWED_IDS:
+                await update.message.reply_html(
+                    "🚫 <b>Kirish taqiqlangan!</b>\n\n"
+                    "Sizning ID: <code>{}</code>\n\n"
+                    "Bu bot faqat ruxsat berilgan foydalanuvchilar uchun.\n"
+                    "Administrator bilan bog'laning.".format(user_id)
+                )
+                return
+            
+            # ✅ Ruxsat berilgan foydalanuvchi
+            app_url_with_user = APP_URL + "?tg_user=" + str(user_id)
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))],
+                [InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]
+            ])
+            await update.message.reply_html(
+                "👋 <b>{}</b>\n\n"
+                "🏪 SmartStore POS\n\n"
+                "✅ Sizning ID: <code>{}</code>\n\n"
+                "👇 Ilovaga o'ting:".format(user.full_name, user_id),
+                reply_markup=kb
+            )
         
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query
