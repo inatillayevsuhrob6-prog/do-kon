@@ -353,10 +353,19 @@ def api_checkout():
 
 @app.route("/sales")
 def sales_list():
-    db=get_db(); rows=db.execute("SELECT * FROM sales ORDER BY id DESC LIMIT 100").fetchall()
+    db=get_db()
+    rows=db.execute("""
+        SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products
+        FROM sales s
+        LEFT JOIN sale_items si ON si.sale_id=s.id
+        LEFT JOIN products p ON p.id=si.product_id
+        GROUP BY s.id
+        ORDER BY s.id DESC LIMIT 100
+    """).fetchall()
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🧾 Sotuvlar</h1>
-    <div class="table-wrap"><table><thead><tr><th>#</th><th>Sana</th><th>Summa</th><th>To'lov</th><th>Mijoz</th><th>Chek</th></tr></thead><tbody>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Sana</th><th>Mahsulotlar</th><th>Summa</th><th>To'lov</th><th>Mijoz</th><th>Chek</th></tr></thead><tbody>
     {%for s in rows%}<tr><td><strong>#{{s.id}}</strong></td><td style="font-size:13px;color:var(--dim);">{{s.created_at[:16]}}</td>
+    <td style="font-size:12px;max-width:250px;">{{s.products or '-'}}</td>
     <td style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(s.total)}}</td>
     <td>{%if s.payment=='cash'%}<span class="badge badge-green">NAQD</span>{%elif s.payment=='card'%}<span class="badge badge-blue">KARTA</span>{%elif s.payment=='credit'%}<span class="badge badge-red">NASIYA</span>{%else%}<span class="badge badge-yellow">ARALASH</span>{%endif%}</td>
     <td style="font-size:12px;">{%if s.customer_name%}<strong>{{s.customer_name}}</strong><br>{%endif%}{%if s.customer_phone%}{{s.customer_phone}}{%else%}-{%endif%}</td>
