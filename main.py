@@ -280,7 +280,8 @@ def pos():
     let h='',t=0;C.forEach((x,i)=>{const s=x.price*x.qty;t+=s;h+='<div class="cart-item"><div style="flex:1"><div style="font-weight:600">'+x.name+'</div><div style="color:var(--dim);font-size:12px;margin-top:2px">'+F(x.price)+' x '+x.qty+' = '+F(s)+'</div></div><div style="display:flex;gap:6px;align-items:center"><button class="qty-btn" onclick="cq('+i+',-1)">−</button><span style="min-width:32px;text-align:center;font-weight:700;font-size:16px">'+x.qty+'</span><button class="qty-btn" onclick="cq('+i+',1)">+</button></div></div>'});
     e.innerHTML=h;document.getElementById('tt').textContent=F(t)+" so'm"}
     function cq(i,d){C[i].qty=Math.max(1,C[i].qty+d);rc()}function cc(){C=[];rc()}
-    async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\\nYangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}
+    async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\
+Yangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}
     function bp(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.1;o.start();o.stop(c.currentTime+.1)}catch{}}
     async function ss(){
   if(sc) return;
@@ -335,7 +336,8 @@ function xs(){if(sc){sc.stop().then(()=>{sc.clear();sc=null});document.getElemen
     const body={items:C.map(x=>({product_id:x.id,qty:x.qty})),payment:t,customer_phone:ph,customer_name:fn};
     try{const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();if(!r.ok)throw new Error(d.error||'Xato');
-    alert('✅ Chek #'+d.sale_id+'\\nJami: '+F(d.total)+' so\\'m');
+    alert('✅ Chek #'+d.sale_id+'\
+Jami: '+F(d.total)+' so\\'m');
     C=[];rc();xc();document.getElementById('cp').value='';document.getElementById('cf').value='';window.open('/sales/'+d.sale_id+'/receipt','_blank')}catch(e){alert('❌ '+e.message)}}
     rc()</script>""")
 
@@ -437,7 +439,8 @@ def receipt(sid):
 
 @app.route("/debts")
 def debts_page():
-    db=get_db(); uid = get_user_id()\n    rows=db.execute("SELECT * FROM debts WHERE total>0 AND user_id=? ORDER BY total DESC",(uid,)).fetchall(); td=sum(r["total"] for r in rows)
+    db=get_db(); uid = get_user_id()
+    rows=db.execute("SELECT * FROM debts WHERE total>0 AND user_id=? ORDER BY total DESC",(uid,)).fetchall(); td=sum(r["total"] for r in rows)
     tp=sum(r["paid"] for r in rows) if rows else 0
     return RP("""<div style="padding:24px;max-width:1000px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">💳 Qarzdorlar</h1>
     <div class="grid g3" style="margin-bottom:20px;">
@@ -500,7 +503,11 @@ def start_bot_thread():
             # User ID ni URL ga qo'shamiz
             app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
             kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
-            await update.message.reply_html("👋 <b>{}</b>\n\n🏪 SmartStore POS\n\n👇 Ilovaga o'ting:".format(user.full_name), reply_markup=kb)
+            await update.message.reply_html("👋 <b>{}</b>
+
+🏪 SmartStore POS
+
+👇 Ilovaga o'ting:".format(user.full_name), reply_markup=kb)
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query; await query.answer()
             await query.edit_message_text("ℹ️ Ilovani oching → Kamera → Skaner → To'lov")
