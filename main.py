@@ -32,6 +32,18 @@ def get_user_id():
         return uid
     return session.get('tg_user', 0)
 
+
+def require_auth(f):
+    """Har bir sahifada ID tekshiruv"""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        uid = get_user_id()
+        if uid not in ALLOWED_IDS:
+            return render_template_string("""<!DOCTYPE html><html><head><meta charset='utf-8'><title>Kirish taqiqlangan</title>""" + "<style>" + CSS + """</style></head><body><div style="padding:24px;max-width:500px;margin:60px auto;"><div class='card' style='text-align:center;padding:40px;'><div style='font-size:64px;margin-bottom:20px;'>🚫</div><h1 style='font-size:32px;margin-bottom:12px;color:var(--red);'>Kirish taqiqlangan!</h1><p style='color:var(--dim);margin-bottom:16px;font-size:16px;'>Sizning ID: <strong style="color:#fff;">{}</strong></p><p style='color:var(--dim);margin-bottom:32px;font-size:14px;'>Bu tizim faqat ruxsat berilgan foydalanuvchilar uchun.</p><a href='/login' class='btn btn-primary' style='padding:18px;font-size:18px;'>← Login</a></div></div></body></html>""".format(uid))
+        return f(*args, **kwargs)
+    return decorated
+
 def init_db():
     db = sqlite3.connect(DB_PATH)
     db.executescript("""
@@ -112,6 +124,7 @@ def logout():
     return redirect("/login")
 
 @app.route("/dashboard")
+@require_auth
 def dashboard():
     db = get_db()
     uid = get_user_id()
