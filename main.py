@@ -21,6 +21,15 @@ def close_db(exc):
     db = g.pop("db", None)
     if db: db.close()
 
+def get_user_id():
+    """Telegram ID yoki session'dan user ID olish"""
+    # Agar Telegram WebApp bo'lsa, user ID ni olamiz
+    tg_user = request.args.get('tg_user') or request.cookies.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        return int(tg_user)
+    # Aks holda session'dan
+    return session.get('user_id', 0)
+
 def init_db():
     db = sqlite3.connect(DB_PATH)
     db.executescript("""
@@ -54,8 +63,23 @@ def init_db():
             paid REAL DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     """)
-    # Migratsiya (eski bazalar uchun)
+    # Migratsiya (eski bazalar uchun) + user_id qo'shish
     try:
+        # Products ga user_id
+        cols = [r[1] for r in db.execute("PRAGMA table_info(products)").fetchall()]
+        if "user_id" not in cols:
+            db.execute("ALTER TABLE products ADD COLUMN user_id INTEGER DEFAULT 0")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id)")
+        # Sales ga user_id
+        cols = [r[1] for r in db.execute("PRAGMA table_info(sales)").fetchall()]
+        if "user_id" not in cols:
+            db.execute("ALTER TABLE sales ADD COLUMN user_id INTEGER DEFAULT 0")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_sales_user ON sales(user_id)")
+        # Debts ga user_id
+        cols = [r[1] for r in db.execute("PRAGMA table_info(debts)").fetchall()]
+        if "user_id" not in cols:
+            db.execute("ALTER TABLE debts ADD COLUMN user_id INTEGER DEFAULT 0")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_debts_user ON debts(user_id)")
         cols = [r[1] for r in db.execute("PRAGMA table_info(sales)").fetchall()]
         if "customer_name" not in cols:
             db.execute("ALTER TABLE sales ADD COLUMN customer_name TEXT DEFAULT ''")
@@ -145,13 +169,14 @@ def index(): return redirect("/dashboard")
 @app.route("/dashboard")
 def dashboard():
     db=get_db(); today=datetime.now().strftime("%Y-%m-%d")
-    ts=db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
-    tc=db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
-    tp=db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
-    ls=db.execute("SELECT COUNT(*) FROM products WHERE stock<=min_stock").fetchone()[0]
-    td=db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE total>0").fetchone()[0]
-    ws=db.execute("SELECT date(created_at) d,SUM(total) s FROM sales WHERE created_at>=date('now','-7 days') GROUP BY d ORDER BY d").fetchall()
-    top=db.execute("SELECT p.name,SUM(si.qty) t FROM sale_items si JOIN products p ON p.id=si.product_id GROUP BY si.product_id ORDER BY t DESC LIMIT 5").fetchall()
+    uid = get_user_id()
+    ts=db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=? AND user_id=?",(today,uid)).fetchone()[0]
+    tc=db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=? AND user_id=?",(today,uid)).fetchone()[0]
+    tp=db.execute("SELECT COUNT(*) FROM products WHERE user_id=?",(uid,)).fetchone()[0]
+    ls=db.execute("SELECT COUNT(*) FROM products WHERE stock<=min_stock AND user_id=?",(uid,)).fetchone()[0]
+    td=db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE total>0 AND user_id=?",(uid,)).fetchone()[0]
+    ws=db.execute("SELECT date(created_at) d,SUM(total) s FROM sales WHERE created_at>=date('now','-7 days') AND user_id=? GROUP BY d ORDER BY d",(uid,)).fetchall()
+    top=db.execute("SELECT p.name,SUM(si.qty) t FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales s ON s.id=si.sale_id WHERE s.user_id=? GROUP BY si.product_id ORDER BY t DESC LIMIT 5",(uid,)).fetchall()
     return RP("""<div style="padding:24px;max-width:1400px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">📊 Dashboard</h1>
     <div class="grid g4" style="margin-bottom:24px;"><div class="stat-card"><div class="stat-label">💰 Bugungi savdo</div><div class="stat-value">{{"{:,.0f}".format(ts)}}</div></div>
     <div class="stat-card green"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{tc}}</div></div>
@@ -166,7 +191,8 @@ def dashboard():
 @app.route("/products")
 def products_list():
     db=get_db(); q=request.args.get("q","")
-    rows=db.execute("SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? ORDER BY id DESC",("%"+q+"%","%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
+    uid = get_user_id()
+    rows=db.execute("SELECT * FROM products WHERE user_id=? AND (name LIKE ? OR barcode LIKE ?) ORDER BY id DESC",(uid,"%"+q+"%","%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products WHERE user_id=? ORDER BY id DESC",(uid,)).fetchall()
     low=[r for r in rows if r["stock"]<=r["min_stock"]]
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;"><h1 style="font-size:28px;font-weight:800;">📦 Mahsulotlar <span style="color:var(--dim);font-size:16px;">({{rows|length}})</span></h1><a href="/products/new" class="btn btn-green">➕ Yangi</a></div>
     <form method="GET" style="display:flex;gap:8px;margin-bottom:20px;"><input class="input" name="q" value="{{q}}" placeholder="🔍 Qidiruv..." style="margin:0;"><button class="btn btn-primary">Qidirish</button></form>
@@ -182,7 +208,7 @@ def product_new():
     if request.method=="POST":
         db=get_db()
         try:
-            db.execute("INSERT INTO products(name,barcode,price,min_stock,stock) VALUES(?,?,?,?,?)",(request.form["name"].strip(),request.form["barcode"].strip(),float(request.form["price"]),int(request.form.get("min_stock",5)),int(request.form.get("stock",0))))
+            db.execute("INSERT INTO products(name,barcode,price,min_stock,stock,user_id) VALUES(?,?,?,?,?,?)",(request.form["name"].strip(),request.form["barcode"].strip(),float(request.form["price"]),int(request.form.get("min_stock",5)),int(request.form.get("stock",0)),get_user_id()))
             db.commit(); return redirect("/products")
         except sqlite3.IntegrityError:
             return render_template_string("<html><body style='background:#0a0e1a;color:#ef4444;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif'><h2>❌ Barcode mavjud</h2><br><a href='/products' style='color:#3b82f6'>← Orqaga</a></body></html>")
@@ -336,13 +362,13 @@ def api_checkout():
             if p["stock"] < qty: raise Exception("{} yetarli emas! Qoldiq: {}".format(p["name"],p["stock"]))
             prepared.append((p,qty)); total += p["price"] * qty
         debt = total if payment == "credit" else 0
-        cur = db.execute("INSERT INTO sales(total,payment,customer_phone,customer_name,debt) VALUES(?,?,?,?,?)",(total,payment,phone,cname,debt))
+        cur = db.execute("INSERT INTO sales(total,payment,customer_phone,customer_name,debt,user_id) VALUES(?,?,?,?,?,?)",(total,payment,phone,cname,debt,get_user_id()))
         sid = cur.lastrowid
         for p,q in prepared:
             db.execute("INSERT INTO sale_items(sale_id,product_id,qty,price) VALUES(?,?,?,?)",(sid,p["id"],q,p["price"]))
             db.execute("UPDATE products SET stock=stock-? WHERE id=?",(q,p["id"]))
         if payment == "credit" and phone:
-            db.execute("INSERT INTO debts(phone,full_name,total,paid) VALUES(?,?,?,0) ON CONFLICT(phone) DO UPDATE SET full_name=?,total=total+?",(phone,cname or "Mijoz",debt,cname or "Mijoz",debt))
+            db.execute("INSERT INTO debts(phone,full_name,total,paid,user_id) VALUES(?,?,?,0,?) ON CONFLICT(phone) DO UPDATE SET full_name=?,total=total+?",(phone,cname or "Mijoz",debt,get_user_id(),cname or "Mijoz",debt))
         db.commit()
         return jsonify({"sale_id":sid,"total":total})
     except Exception as e:
@@ -353,14 +379,16 @@ def api_checkout():
 @app.route("/sales")
 def sales_list():
     db=get_db()
+    uid = get_user_id()
     rows=db.execute("""
         SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products
         FROM sales s
         LEFT JOIN sale_items si ON si.sale_id=s.id
         LEFT JOIN products p ON p.id=si.product_id
+        WHERE s.user_id=?
         GROUP BY s.id
         ORDER BY s.id DESC LIMIT 100
-    """).fetchall()
+    """,(uid,)).fetchall()
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🧾 Sotuvlar</h1>
     <div class="table-wrap"><table><thead><tr><th>#</th><th>Sana</th><th>Mahsulotlar</th><th>Summa</th><th>To'lov</th><th>Mijoz</th><th>Chek</th></tr></thead><tbody>
     {%for s in rows%}<tr><td><strong>#{{s.id}}</strong></td><td style="font-size:13px;color:var(--dim);">{{s.created_at[:16]}}</td>
@@ -427,13 +455,14 @@ def debt_pay(did):
 def reports_page():
     db=get_db(); p=request.args.get("period","day")
     w={"day":"date(created_at)=date('now')","week":"created_at>=date('now','-7 days')","month":"created_at>=date('now','-30 days')"}.get(p,"date(created_at)=date('now')")
-    st=db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w).fetchone()
-    bp=db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" GROUP BY payment").fetchall()
-    tp=db.execute("SELECT p.name,SUM(si.qty) q,SUM(si.qty*si.price) s FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales sl ON sl.id=si.sale_id WHERE "+w+" GROUP BY si.product_id ORDER BY s DESC LIMIT 5").fetchall()
-    dc_=db.execute("SELECT COUNT(*) c FROM debts WHERE total>0").fetchone()[0]
-    given=db.execute("SELECT COALESCE(SUM(total+paid),0) FROM debts").fetchone()[0]
-    paid_=db.execute("SELECT COALESCE(SUM(paid),0) FROM debts").fetchone()[0]
-    rest=db.execute("SELECT COALESCE(SUM(total),0) FROM debts").fetchone()[0]
+    uid = get_user_id()
+    st=db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w+" AND user_id=?",(uid,)).fetchone()
+    bp=db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" AND user_id=? GROUP BY payment",(uid,)).fetchall()
+    tp=db.execute("SELECT p.name,SUM(si.qty) q,SUM(si.qty*si.price) s FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales sl ON sl.id=si.sale_id WHERE "+w+" AND sl.user_id=? GROUP BY si.product_id ORDER BY s DESC LIMIT 5",(uid,)).fetchall()
+    dc_=db.execute("SELECT COUNT(*) c FROM debts WHERE total>0 AND user_id=?",(uid,)).fetchone()[0]
+    given=db.execute("SELECT COALESCE(SUM(total+paid),0) FROM debts WHERE user_id=?",(uid,)).fetchone()[0]
+    paid_=db.execute("SELECT COALESCE(SUM(paid),0) FROM debts WHERE user_id=?",(uid,)).fetchone()[0]
+    rest=db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE user_id=?",(uid,)).fetchone()[0]
     ac=(st["s"]/st["c"]) if st["c"]>0 else 0
     return RP("""<div style="padding:16px;max-width:900px;margin:0 auto;">
     <h1 style="font-size:24px;font-weight:800;margin-bottom:16px;">📈 Hisobotlar</h1>
@@ -464,7 +493,9 @@ def start_bot_thread():
         from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
         async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = update.effective_user
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=APP_URL))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
+            # User ID ni URL ga qo'shamiz
+            app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
             await update.message.reply_html("👋 <b>{}</b>\n\n🏪 SmartStore POS\n\n👇 Ilovaga o'ting:".format(user.full_name), reply_markup=kb)
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query; await query.answer()
