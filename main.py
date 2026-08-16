@@ -171,11 +171,25 @@ def reports_page():
     db=get_db(); p=request.args.get("period","day")
     w={"day":"date(created_at)=date('now')","week":"created_at>=date('now','-7 days')","month":"created_at>=date('now','-30 days')"}.get(p,"date(created_at)=date('now')")
     st=db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w).fetchone()
-    bp=db.execute("SELECT payment,COUNT(*) c,SUM(total) s FROM sales WHERE "+w+" GROUP BY payment").fetchall()
-    bd=db.execute("SELECT date(created_at) d,COUNT(*) c,SUM(total) s FROM sales WHERE "+w+" GROUP BY d ORDER BY d").fetchall()
-    tp=db.execute("SELECT p.name,SUM(si.qty) q,SUM(si.qty*si.price) s FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales sl ON sl.id=si.sale_id WHERE "+w+" GROUP BY si.product_id ORDER BY s DESC LIMIT 10").fetchall()
+    bp=db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" GROUP BY payment").fetchall()
+    tp=db.execute("SELECT p.name,SUM(si.qty) q,SUM(si.qty*si.price) s FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales sl ON sl.id=si.sale_id WHERE "+w+" GROUP BY si.product_id ORDER BY s DESC LIMIT 5").fetchall()
     ac=(st["s"]/st["c"]) if st["c"]>0 else 0
-    return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">📈 Hisobotlar</h1><div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;"><a href="?period=day" class="btn {%if period=='day'%}btn-primary{%else%}btn-gray{%endif%}">Kunlik</a><a href="?period=week" class="btn {%if period=='week'%}btn-primary{%else%}btn-gray{%endif%}">Haftalik</a><a href="?period=month" class="btn {%if period=='month'%}btn-primary{%else%}btn-gray{%endif%}">Oylik</a></div><div class="grid g4" style="margin-bottom:24px;"><div class="stat-card"><div class="stat-label">💰 Savdo</div><div class="stat-value">{{"{:,.0f}".format(st.s)}}</div></div><div class="stat-card green"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{st.c}}</div></div><div class="stat-card yellow"><div class="stat-label">📊 O'rtacha</div><div class="stat-value">{{"{:,.0f}".format(ac)}}</div></div><div class="stat-card"><div class="stat-label">🏷 Turlar</div><div class="stat-value">{{bp|length}}</div></div></div><div class="grid g2"><div class="card"><h2 style="margin-bottom:16px;font-size:18px;">💳 To'lov turlari</h2><div class="table-wrap"><table><thead><tr><th>Tur</th><th>Soni</th><th>Summa</th></tr></thead><tbody>{%for x in bp%}<tr><td>{{x.payment|upper}}</td><td>{{x.c}}</td><td style="color:var(--green);font-weight:600;">{{"{:,.0f}".format(x.s)}}</td></tr>{%endfor%}</tbody></table></div></div><div class="card"><h2 style="margin-bottom:16px;font-size:18px;">🏆 Top 10</h2><div class="table-wrap"><table><thead><tr><th>Mahsulot</th><th>Soni</th><th>Summa</th></tr></thead><tbody>{%for x in tp%}<tr><td>{{x.name}}</td><td>{{x.q}}</td><td style="color:var(--green);font-weight:600;">{{"{:,.0f}".format(x.s)}}</td></tr>{%endfor%}</tbody></table></div></div></div><div class="card" style="margin-top:24px;"><h2 style="margin-bottom:16px;font-size:18px;">📅 Kunlar</h2><div class="table-wrap"><table><thead><tr><th>Sana</th><th>Cheklar</th><th>Summa</th></tr></thead><tbody>{%for x in bd%}<tr><td>{{x.d}}</td><td>{{x.c}}</td><td style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(x.s)}}</td></tr>{%endfor%}</tbody></table></div></div></div>""",period=p,st=st,bp=bp,bd=bd,tp=tp,ac=ac)
+    return RP("""<div style="padding:16px;max-width:800px;margin:0 auto;">
+    <h1 style="font-size:24px;font-weight:800;margin-bottom:16px;">📈 Hisobot</h1>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+    <a href="?period=day" class="btn {%if period=='day'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;justify-content:center;">Kun</a>
+    <a href="?period=week" class="btn {%if period=='week'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;justify-content:center;">Hafta</a>
+    <a href="?period=month" class="btn {%if period=='month'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;justify-content:center;">Oy</a></div>
+    <div class="stat-card" style="margin-bottom:12px;"><div class="stat-label">💰 Umumiy savdo</div><div class="stat-value" style="color:var(--green);">{{"{:,.0f}".format(st.s)}} so'm</div></div>
+    <div class="grid g2" style="margin-bottom:12px;">
+    <div class="stat-card green"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{st.c}}</div></div>
+    <div class="stat-card yellow"><div class="stat-label">📊 O'rtacha chek</div><div class="stat-value">{{"{:,.0f}".format(ac)}}</div></div></div>
+    <div class="card" style="margin-bottom:12px;"><h2 style="font-size:16px;margin-bottom:12px;">💳 To'lov turlari</h2>
+    {%for x in bp%}<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>{{x.payment|upper}}</span><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(x.s)}} so'm</span></div>{%else%}<p style="color:var(--dim);text-align:center;padding:20px;">Ma'lumot yo'q</p>{%endfor%}</div>
+    <div class="card"><h2 style="font-size:16px;margin-bottom:12px;">🏆 Top 5 mahsulot</h2>
+    {%for x in tp%}<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);"><div><div style="font-weight:600;">{{x.name}}</div><div style="font-size:12px;color:var(--dim);">{{x.q}} dona</div></div><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(x.s)}}</span></div>{%else%}<p style="color:var(--dim);text-align:center;padding:20px;">Hali savdo yo'q</p>{%endfor%}</div>
+    </div>""",period=p,st=st,bp=bp,tp=tp,ac=ac)
+
 
 def start_bot_thread():
     if not BOT_TOKEN:
