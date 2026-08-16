@@ -657,7 +657,7 @@ def start_bot_thread():
                 "👋 <b>{}</b>\n\n"
                 "🏪 SmartStore POS\n\n"
                 "✅ Sizning ID: <code>{}</code>\n\n"
-                "👇 Ilovaga o'ting:".format(user.full_name),
+                "👇 Ilovaga o'ting:".format(user.full_name, user_id),
                 reply_markup=kb
             )
         
@@ -673,7 +673,11 @@ def start_bot_thread():
             print("🤖 Telegram bot ishga tushdi!")
             async with app_bot:
                 await app_bot.start()
-                await app_bot.updater.start_polling(drop_pending_updates=True)
+                try:
+                    await app_bot.updater.start_polling(drop_pending_updates=True)
+                except Exception as e:
+                    print(f"⚠️ Polling xatosi (boshqa instance ishlashi mumkin): {e}")
+                    print("💡 Yechim: Boshqa joydagi botni to'xtating yoki 5 daqiqa kuting")
                 await asyncio.Event().wait()
         
         loop = asyncio.new_event_loop()
