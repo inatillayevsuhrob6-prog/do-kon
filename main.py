@@ -460,8 +460,54 @@ def start_bot_thread():
         from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
         async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = update.effective_user
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=APP_URL))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
-            await update.message.reply_html("👋 <b>{}</b>\n\n🏪 SmartStore POS\n\n👇 Ilovaga o'ting:".format(user.full_name), reply_markup=kb)
+            
+            # Bot haqida to'liq ma'lumot
+            info_text = """🏪 <b>SmartStore POS</b> - Professional do'kon boshqaruvi tizimi
+
+<b>✨ Imkoniyatlar:</b>
+
+📦 <b>Mahsulotlar boshqaruvi</b>
+• Shtrix-kod orqali qo'shish
+• Qoldiqni kuzatish
+• Kam qoldiq ogohlantirishi
+
+🛒 <b>Kassa (POS)</b>
+• Professional kamera skaner (60 FPS)
+• Tez va aniq barcode o'qish
+• Naqd, Karta, Nasiya, Aralash to'lov
+
+🧾 <b>Sotuvlar</b>
+• Barcha cheklar tarixi
+• Mahsulot nomlari bilan
+• PDF formatda yuklash
+
+💳 <b>Qarzdorlar</b>
+• Ism va telefon bilan saqlash
+• To'lov qabul qilish
+• Jami qarz statistikasi
+
+📈 <b>Hisobotlar</b>
+• Kunlik, Haftalik, Oylik
+• Top 5 mahsulot
+• To'lov turlari bo'yicha
+
+🗄️ <b>Database tizimi</b>
+• Har bir do'kon uchun alohida baza
+• Parol bilan himoyalangan
+• Bir nechta foydalanuvchi
+
+━━━━━━━━━━━━━━━━━━━━
+
+👋 <b>{}</b>, xush kelibsiz!
+
+👇 Ilovani ochib, darhol ishni boshlang:""".format(user.full_name)
+            
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=APP_URL))],
+                [InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]
+            ])
+            
+            await update.message.reply_html(info_text, reply_markup=kb)
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query; await query.answer()
             await query.edit_message_text("ℹ️ Ilovani oching → Kamera → Skaner → To'lov")
