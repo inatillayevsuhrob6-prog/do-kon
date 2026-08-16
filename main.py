@@ -164,7 +164,11 @@ def RP(tpl, **ctx):
     return render_template_string(full, **ctx)
 
 @app.route("/")
-def index(): return redirect("/dashboard")
+def index():
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        session['tg_user'] = int(tg_user)
+    return redirect("/dashboard")
 
 @app.route("/dashboard")
 def dashboard():
@@ -433,7 +437,7 @@ def receipt(sid):
 
 @app.route("/debts")
 def debts_page():
-    db=get_db(); rows=db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC").fetchall(); td=sum(r["total"] for r in rows)
+    db=get_db(); uid = get_user_id()\n    rows=db.execute("SELECT * FROM debts WHERE total>0 AND user_id=? ORDER BY total DESC",(uid,)).fetchall(); td=sum(r["total"] for r in rows)
     tp=sum(r["paid"] for r in rows) if rows else 0
     return RP("""<div style="padding:24px;max-width:1000px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">💳 Qarzdorlar</h1>
     <div class="grid g3" style="margin-bottom:20px;">
