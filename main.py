@@ -15,6 +15,21 @@ def get_db_path():
         return None
     return os.path.join(os.path.dirname(DB_PATH), db_name + ".db")
 
+def ensure_tables(db):
+    """Agar baza bo'sh bo'lsa, jadvallarni avtomatik yaratadi"""
+    try:
+        tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if 'products' not in tables or 'sales' not in tables:
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, customer_phone TEXT, customer_name TEXT DEFAULT '', debt REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+                CREATE TABLE IF NOT EXISTS sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, product_id INTEGER NOT NULL, qty INTEGER NOT NULL, price REAL NOT NULL);
+                CREATE TABLE IF NOT EXISTS debts (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, total REAL DEFAULT 0, paid REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+            """)
+            db.commit()
+    except Exception as e:
+        print("ensure_tables xatosi:", e)
+
 def get_db():
     if "db" not in g:
         db_path = get_db_path()
@@ -23,6 +38,8 @@ def get_db():
             return None
         g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
+        # Avtomatik jadval yaratish (agar yo'q bo'lsa)
+        ensure_tables(g.db)
     return g.db
 
 def init_user_db(db_path):
