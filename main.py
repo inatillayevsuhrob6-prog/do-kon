@@ -1,6 +1,6 @@
-import os, sqlite3, threading, io, time, re, hashlib
+import os, sqlite3, threading, io, time, re, hashlib, re, hashlib
 from datetime import datetime
-from flask import Flask, request, redirect, render_template_string, send_file, jsonify, g, session
+from flask import Flask, request, redirect, render_template_string, send_file, jsonify, g, session, session
 
 BOT_TOKEN = "8863204152:AAF-VbLwrDrnSl832BZchmMA6HhJmbfQgjs"
 APP_URL = "https://smartstore-web-dvse.onrender.com"
@@ -163,8 +163,9 @@ def db_disconnect():
 @app.route("/dashboard")
 def dashboard():
     if not session.get('db_name'): return redirect("/db")
-    db=get_db();
-    if not db: return redirect("/db") today=datetime.now().strftime("%Y-%m-%d")
+    db=get_db()
+    if not db: return redirect("/db")
+    today=datetime.now().strftime("%Y-%m-%d")
     ts=db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
     tc=db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
     tp=db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
@@ -186,8 +187,9 @@ def dashboard():
 @app.route("/products")
 def products_list():
     if not session.get('db_name'): return redirect("/db")
-    db=get_db();
-    if not db: return redirect("/db") q=request.args.get("q","")
+    db=get_db()
+    if not db: return redirect("/db") 
+    q=request.args.get("q","")
     rows=db.execute("SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? ORDER BY id DESC",("%"+q+"%","%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
     low=[r for r in rows if r["stock"]<=r["min_stock"]]
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;"><h1 style="font-size:28px;font-weight:800;">📦 Mahsulotlar <span style="color:var(--dim);font-size:16px;">({{rows|length}})</span></h1><a href="/products/new" class="btn btn-green">➕ Yangi</a></div>
@@ -324,8 +326,9 @@ def api_checkout():
 @app.route("/sales")
 def sales_list():
     if not session.get('db_name'): return redirect("/db")
-    db=get_db();
-    if not db: return redirect("/db") rows=db.execute("SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id LEFT JOIN products p ON p.id=si.product_id GROUP BY s.id ORDER BY s.id DESC LIMIT 100").fetchall()
+    db=get_db()
+    if not db: return redirect("/db") 
+    rows=db.execute("SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id LEFT JOIN products p ON p.id=si.product_id GROUP BY s.id ORDER BY s.id DESC LIMIT 100").fetchall()
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🧾 Sotuvlar</h1>
     <div class="table-wrap"><table><thead><tr><th>#</th><th>Sana</th><th>Mahsulotlar</th><th>Summa</th><th>To'lov</th><th>Mijoz</th><th>Chek</th></tr></thead><tbody>
     {%for s in rows%}<tr><td><strong>#{{s.id}}</strong></td><td style="font-size:13px;color:var(--dim);">{{s.created_at[:16]}}</td>
@@ -372,8 +375,9 @@ def receipt(sid):
 @app.route("/debts")
 def debts_page():
     if not session.get('db_name'): return redirect("/db")
-    db=get_db();
-    if not db: return redirect("/db") rows=db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC").fetchall(); td=sum(r["total"] for r in rows)
+    db=get_db()
+    if not db: return redirect("/db") 
+    rows=db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC").fetchall(); td=sum(r["total"] for r in rows)
     tp=sum(r["paid"] for r in rows) if rows else 0
     return RP("""<div style="padding:24px;max-width:1000px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">💳 Qarzdorlar</h1>
     <div class="grid g3" style="margin-bottom:20px;"><div class="stat-card red"><div class="stat-label">💸 Jami qarz</div><div class="stat-value">{{"{:,.0f}".format(td)}}</div></div>
@@ -394,8 +398,9 @@ def debt_pay(did):
 @app.route("/reports")
 def reports_page():
     if not session.get('db_name'): return redirect("/db")
-    db=get_db();
-    if not db: return redirect("/db") p=request.args.get("period","day")
+    db=get_db()
+    if not db: return redirect("/db") 
+    p=request.args.get("period","day")
     w={"day":"date(created_at)=date('now')","week":"created_at>=date('now','-7 days')","month":"created_at>=date('now','-30 days')"}.get(p,"date(created_at)=date('now')")
     st=db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w).fetchone()
     bp=db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" GROUP BY payment").fetchall()
