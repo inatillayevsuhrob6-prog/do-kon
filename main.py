@@ -1,6 +1,6 @@
-import os, sqlite3, threading, io, time
+import os, sqlite3, threading, io, time, re, hashlib
 from datetime import datetime
-from flask import Flask, request, redirect, render_template_string, send_file, jsonify, g
+from flask import Flask, request, redirect, render_template_string, send_file, jsonify, g, session
 
 BOT_TOKEN = "8863204152:AAF-VbLwrDrnSl832BZchmMA6HhJmbfQgjs"
 APP_URL = "https://smartstore-web-dvse.onrender.com"
@@ -9,11 +9,34 @@ DB_PATH = "/tmp/smartstore.db" if os.environ.get("RENDER") else os.path.join(os.
 app = Flask(__name__)
 app.secret_key = "smartstore-2024"
 
+def get_db_path():
+    db_name = session.get('db_name')
+    if not db_name or not re.match(r'^[a-zA-Z0-9_]+$', db_name):
+        return None
+    return os.path.join(os.path.dirname(DB_PATH), db_name + ".db")
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+        db_path = get_db_path()
+        if not db_path:
+            g.db = None
+            return None
+        g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
     return g.db
+
+def init_user_db(db_path):
+    db = sqlite3.connect(db_path)
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, customer_phone TEXT, customer_name TEXT DEFAULT '', debt REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, product_id INTEGER NOT NULL, qty INTEGER NOT NULL, price REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS debts (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, total REAL DEFAULT 0, paid REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    """)
+    db.commit(); db.close()
+
+def db_error(msg):
+    return render_template_string("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>" + CSS + "</style></head><body><div style='padding:24px;max-width:500px;margin:60px auto;'><div class='card' style='text-align:center;padding:40px;'><div style='font-size:56px;margin-bottom:16px;'>❌</div><h1 style='font-size:24px;margin-bottom:12px;color:var(--red);'>Xato</h1><p style='color:var(--dim);margin-bottom:24px;'>" + msg + "</p><a href='/db' class='btn btn-primary' style='padding:16px;'>← Orqaga</a></div></div></body></html>")
 
 @app.teardown_appcontext
 def close_db(exc):
@@ -34,7 +57,7 @@ CSS = "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;
 
 NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a></div></div>"
 
-MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a></div>"
+MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
 
 TG_SCRIPT = "<script src='https://telegram.org/js/telegram-web-app.js'></script><script>if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();}</script>"
 
@@ -43,11 +66,105 @@ def RP(tpl, **ctx):
     return render_template_string(full, **ctx)
 
 @app.route("/")
-def index(): return redirect("/dashboard")
+def index():
+    if not session.get('db_name'):
+        return redirect("/db")
+    return redirect("/dashboard")
+
+@app.route("/db")
+def db_page():
+    db_name = session.get('db_name')
+    return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;">
+    <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🗄️ Database</h1>
+    {%if db_name%}
+    <div class="card" style="margin-bottom:20px;border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.05);">
+        <div style="display:flex;align-items:center;gap:16px;">
+            <div style="font-size:52px;">✅</div>
+            <div><div style="font-size:13px;color:var(--dim);font-weight:600;">Ulangan database</div>
+            <div style="font-size:24px;font-weight:800;color:var(--green);margin-top:4px;">{{db_name}}</div></div>
+        </div>
+    </div>
+    <div class="grid g2">
+        <a href="/dashboard" class="btn btn-primary" style="padding:18px;justify-content:center;">📊 Panelga o'tish</a>
+        <a href="/db/disconnect" class="btn btn-red" style="padding:18px;justify-content:center;">🔌 Uzish</a>
+    </div>
+    {%else%}
+    <div class="card" style="margin-bottom:16px;border-color:rgba(239,68,68,.3);">
+        <div style="display:flex;align-items:center;gap:12px;"><div style="font-size:36px;">⚠️</div>
+        <div style="color:var(--dim);font-size:14px;">Hali database <strong style="color:var(--red);">ulanmagan</strong>. Yarating yoki ulaning.</div></div>
+    </div>
+    <div class="card" style="margin-bottom:20px;">
+        <h2 style="font-size:20px;margin-bottom:16px;">➕ Yangi database yaratish</h2>
+        <form method="POST" action="/db/create">
+            <label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;">Database nomi</label>
+            <input class="input" name="db_name" placeholder="masalan: myshop" required pattern="[a-zA-Z0-9_]+">
+            <label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;margin-top:12px;">Parol</label>
+            <input class="input" name="password" type="password" placeholder="Kamida 4 belgi" required minlength="4">
+            <button class="btn btn-green" style="width:100%;padding:18px;margin-top:20px;justify-content:center;font-size:16px;">🚀 Yaratish</button>
+        </form>
+    </div>
+    <div class="card">
+        <h2 style="margin-bottom:16px;">🔗 Mavjud bazaga ulanish</h2>
+        <form method="POST" action="/db/connect">
+            <label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;">Database nomi</label>
+            <input class="input" name="db_name" placeholder="Baza nomi" required pattern="[a-zA-Z0-9_]+">
+            <label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;margin-top:12px;">Parol</label>
+            <input class="input" name="password" type="password" placeholder="Parol" required>
+            <button class="btn btn-primary" style="width:100%;padding:18px;margin-top:20px;justify-content:center;font-size:16px;">🔌 Ulanish</button>
+        </form>
+    </div>
+    {%endif%}
+    </div>""", db_name=db_name)
+
+@app.route("/db/create", methods=["POST"])
+def db_create():
+    db_name = request.form.get("db_name", "").strip().lower()
+    password = request.form.get("password", "")
+    if not re.match(r'^[a-zA-Z0-9_]+$', db_name):
+        return db_error("Noto'g'ri nom! Faqat harf, raqam, underscore.")
+    if len(password) < 4:
+        return db_error("Parol kamida 4 ta belgi bo'lsin!")
+    db_path = os.path.join(os.path.dirname(DB_PATH), db_name + ".db")
+    pass_path = os.path.join(os.path.dirname(DB_PATH), db_name + ".pass")
+    if os.path.exists(db_path):
+        return db_error("Bu nom allaqachon mavjud! Ulanishdan foydalaning.")
+    with open(pass_path, 'w') as f:
+        f.write(hashlib.sha256(password.encode()).hexdigest())
+    init_user_db(db_path)
+    session['db_name'] = db_name
+    session['db_message'] = "Database '" + db_name + "' yaratildi va ulandi!"
+    return redirect("/dashboard")
+
+@app.route("/db/connect", methods=["POST"])
+def db_connect():
+    db_name = request.form.get("db_name", "").strip().lower()
+    password = request.form.get("password", "")
+    if not re.match(r'^[a-zA-Z0-9_]+$', db_name):
+        return db_error("Noto'g'ri nom!")
+    db_path = os.path.join(os.path.dirname(DB_PATH), db_name + ".db")
+    pass_path = os.path.join(os.path.dirname(DB_PATH), db_name + ".pass")
+    if not os.path.exists(db_path):
+        return db_error("Bu nomda database yo'q! Avval yarating.")
+    if not os.path.exists(pass_path):
+        return db_error("Parol fayli topilmadi!")
+    with open(pass_path, 'r') as f:
+        saved = f.read().strip()
+    if hashlib.sha256(password.encode()).hexdigest() != saved:
+        return db_error("Noto'g'ri parol!")
+    session['db_name'] = db_name
+    session['db_message'] = "Database '" + db_name + "' ga ulandi!"
+    return redirect("/dashboard")
+
+@app.route("/db/disconnect")
+def db_disconnect():
+    session.pop('db_name', None)
+    return redirect("/db")
 
 @app.route("/dashboard")
 def dashboard():
-    db=get_db(); today=datetime.now().strftime("%Y-%m-%d")
+    if not session.get('db_name'): return redirect("/db")
+    db=get_db();
+    if not db: return redirect("/db") today=datetime.now().strftime("%Y-%m-%d")
     ts=db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
     tc=db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
     tp=db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
@@ -55,7 +172,9 @@ def dashboard():
     td=db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE total>0").fetchone()[0]
     ws=db.execute("SELECT date(created_at) d,SUM(total) s FROM sales WHERE created_at>=date('now','-7 days') GROUP BY d ORDER BY d").fetchall()
     top=db.execute("SELECT p.name,SUM(si.qty) t FROM sale_items si JOIN products p ON p.id=si.product_id GROUP BY si.product_id ORDER BY t DESC LIMIT 5").fetchall()
-    return RP("""<div style="padding:24px;max-width:1400px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">📊 Dashboard</h1>
+    db_msg = session.pop('db_message', None)
+    banner = '<div style="padding:14px 20px;margin-bottom:20px;background:rgba(16,185,129,.12);border:2px solid var(--green);border-radius:14px;display:flex;align-items:center;gap:12px;"><span style="font-size:26px;">🗄️</span><span style="font-size:15px;font-weight:700;color:var(--green);">' + db_msg + '</span></div>' if db_msg else ''
+    return RP(banner + """<div style="padding:24px;max-width:1400px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">📊 Dashboard</h1>
     <div class="grid g4" style="margin-bottom:24px;"><div class="stat-card"><div class="stat-label">💰 Bugungi savdo</div><div class="stat-value">{{"{:,.0f}".format(ts)}}</div></div>
     <div class="stat-card green"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{tc}}</div></div>
     <div class="stat-card yellow"><div class="stat-label">📦 Mahsulotlar</div><div class="stat-value">{{tp}}</div></div>
@@ -66,7 +185,9 @@ def dashboard():
 
 @app.route("/products")
 def products_list():
-    db=get_db(); q=request.args.get("q","")
+    if not session.get('db_name'): return redirect("/db")
+    db=get_db();
+    if not db: return redirect("/db") q=request.args.get("q","")
     rows=db.execute("SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? ORDER BY id DESC",("%"+q+"%","%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
     low=[r for r in rows if r["stock"]<=r["min_stock"]]
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;"><h1 style="font-size:28px;font-weight:800;">📦 Mahsulotlar <span style="color:var(--dim);font-size:16px;">({{rows|length}})</span></h1><a href="/products/new" class="btn btn-green">➕ Yangi</a></div>
@@ -80,6 +201,7 @@ def products_list():
 
 @app.route("/products/new",methods=["GET","POST"])
 def product_new():
+    if not session.get('db_name'): return redirect("/db")
     if request.method=="POST":
         db=get_db()
         try:
@@ -98,6 +220,7 @@ def product_new():
 
 @app.route("/products/<int:pid>/edit",methods=["GET","POST"])
 def product_edit(pid):
+    if not session.get('db_name'): return redirect("/db")
     db=get_db()
     if request.method=="POST":
         db.execute("UPDATE products SET name=?,barcode=?,price=?,min_stock=?,stock=? WHERE id=?",(request.form["name"],request.form["barcode"],float(request.form["price"]),int(request.form["min_stock"]),int(request.form["stock"]),pid))
@@ -111,10 +234,13 @@ def product_edit(pid):
     <button class="btn btn-green" style="width:100%;margin-top:20px;justify-content:center;font-size:16px;padding:16px;">💾 Saqlash</button></form></div></div>""",p=p)
 
 @app.route("/products/<int:pid>/delete",methods=["POST"])
-def product_delete(pid): db=get_db();db.execute("DELETE FROM products WHERE id=?",(pid,));db.commit();return redirect("/products")
+def product_delete(pid):
+    if not session.get('db_name'): return redirect("/db")
+    db=get_db();db.execute("DELETE FROM products WHERE id=?",(pid,));db.commit();return redirect("/products")
 
 @app.route("/pos")
 def pos():
+    if not session.get('db_name'): return redirect("/db")
     return RP("""<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <div style="padding:24px;max-width:1100px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🛒 Kassa</h1>
     <div class="grid g2"><div class="card"><h2 style="margin-bottom:16px;font-size:18px;">📷 Professional Skaner</h2>
@@ -158,6 +284,7 @@ def pos():
 
 @app.route("/api/product/by-barcode")
 def api_pbc():
+    if not session.get('db_name'): return jsonify({"error":"db yo'q"}),400
     c=request.args.get("code","").strip()
     if not c: return jsonify({"error":"code kerak"}),400
     db=get_db(); p=db.execute("SELECT * FROM products WHERE barcode=?",(c,)).fetchone()
@@ -166,6 +293,7 @@ def api_pbc():
 
 @app.route("/api/checkout",methods=["POST"])
 def api_checkout():
+    if not session.get('db_name'): return jsonify({"error":"db yo'q"}),400
     try:
         data = request.get_json(force=True, silent=True)
         if not data: return jsonify({"error":"JSON yuborilmadi"}),400
@@ -195,7 +323,9 @@ def api_checkout():
 
 @app.route("/sales")
 def sales_list():
-    db=get_db(); rows=db.execute("SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id LEFT JOIN products p ON p.id=si.product_id GROUP BY s.id ORDER BY s.id DESC LIMIT 100").fetchall()
+    if not session.get('db_name'): return redirect("/db")
+    db=get_db();
+    if not db: return redirect("/db") rows=db.execute("SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id LEFT JOIN products p ON p.id=si.product_id GROUP BY s.id ORDER BY s.id DESC LIMIT 100").fetchall()
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🧾 Sotuvlar</h1>
     <div class="table-wrap"><table><thead><tr><th>#</th><th>Sana</th><th>Mahsulotlar</th><th>Summa</th><th>To'lov</th><th>Mijoz</th><th>Chek</th></tr></thead><tbody>
     {%for s in rows%}<tr><td><strong>#{{s.id}}</strong></td><td style="font-size:13px;color:var(--dim);">{{s.created_at[:16]}}</td>
@@ -207,6 +337,7 @@ def sales_list():
 
 @app.route("/sales/<int:sid>/receipt")
 def receipt(sid):
+    if not session.get('db_name'): return "Yo'q",404
     ft=request.args.get("format","html"); db=get_db()
     s=db.execute("SELECT * FROM sales WHERE id=?",(sid,)).fetchone()
     if not s: return "Yo'q",404
@@ -240,7 +371,9 @@ def receipt(sid):
 
 @app.route("/debts")
 def debts_page():
-    db=get_db(); rows=db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC").fetchall(); td=sum(r["total"] for r in rows)
+    if not session.get('db_name'): return redirect("/db")
+    db=get_db();
+    if not db: return redirect("/db") rows=db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC").fetchall(); td=sum(r["total"] for r in rows)
     tp=sum(r["paid"] for r in rows) if rows else 0
     return RP("""<div style="padding:24px;max-width:1000px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">💳 Qarzdorlar</h1>
     <div class="grid g3" style="margin-bottom:20px;"><div class="stat-card red"><div class="stat-label">💸 Jami qarz</div><div class="stat-value">{{"{:,.0f}".format(td)}}</div></div>
@@ -253,13 +386,16 @@ def debts_page():
 
 @app.route("/debts/<int:did>/pay",methods=["POST"])
 def debt_pay(did):
+    if not session.get('db_name'): return redirect("/db")
     amt=float(request.form["amount"]); db=get_db()
     db.execute("UPDATE debts SET total=MAX(0,total-?), paid=COALESCE(paid,0)+? WHERE id=?",(amt,amt,did))
     db.commit(); return redirect("/debts")
 
 @app.route("/reports")
 def reports_page():
-    db=get_db(); p=request.args.get("period","day")
+    if not session.get('db_name'): return redirect("/db")
+    db=get_db();
+    if not db: return redirect("/db") p=request.args.get("period","day")
     w={"day":"date(created_at)=date('now')","week":"created_at>=date('now','-7 days')","month":"created_at>=date('now','-30 days')"}.get(p,"date(created_at)=date('now')")
     st=db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w).fetchone()
     bp=db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" GROUP BY payment").fetchall()
