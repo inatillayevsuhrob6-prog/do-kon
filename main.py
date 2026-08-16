@@ -400,16 +400,15 @@ import sys
 if __name__ == "__main__":
     init_db()
     
-    # Agar "bot" argumenti bo'lsa, faqat botni ishga tushiramiz (Render Worker uchun)
-    if len(sys.argv) > 1 and sys.argv[1] == "bot":
-        print("🤖 Bot ishga tushmoqda...")
-        start_bot_thread()
-    else:
-        # Aks holda faqat web server ishga tushadi (Render Web Service uchun)
-        print("="*50)
-        print("🏪 SmartStore POS (Web)")
-        print("="*50)
-        print("🌐 Port:", os.environ.get("PORT", 5000))
-        print("="*50)
-        port = int(os.environ.get("PORT", 5000))
-        app.run(host="0.0.0.0", port=port, debug=False)
+    # Botni alohida thread'da ishga tushiramiz (bepul yechim)
+    print("🤖 Bot ishga tushmoqda...")
+    threading.Thread(target=start_bot_thread, daemon=True).start()
+    
+    # Web serverni ishga tushiramiz
+    print("="*50)
+    print("🏪 SmartStore POS (Web + Bot)")
+    print("="*50)
+    print("🌐 Port:", os.environ.get("PORT", 5000))
+    print("="*50)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
