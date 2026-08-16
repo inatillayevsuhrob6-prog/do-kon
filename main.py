@@ -13,11 +13,38 @@ app.secret_key = "smartstore-2024"
 ALLOWED_IDS = [8317982282]  # ← O'z ID'laringizni shu yerga qo'shing
 # Masalan: ALLOWED_IDS = [8317982282, 123456789, 987654321]
 
+def get_db_path():
+    """Joriy foydalanuvchining database faylini olish"""
+    db_name = session.get('db_name')
+    if not db_name:
+        return None
+    # Xavfsizlik: faqat harf, raqam, underscore
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]+$', db_name):
+        return None
+    return os.path.join(os.path.dirname(DB_PATH), f"{db_name}.db")
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+        db_path = get_db_path()
+        if not db_path:
+            g.db = None
+            return None
+        g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
     return g.db
+
+def init_user_db(db_path):
+    """Yangi foydalanuvchi uchun database yaratish"""
+    db = sqlite3.connect(db_path)
+    db.executescript("""
+        CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, customer_phone TEXT, customer_name TEXT DEFAULT '', debt REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, product_id INTEGER NOT NULL, qty INTEGER NOT NULL, price REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS debts (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, total REAL DEFAULT 0, paid REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    """)
+    db.commit()
+    db.close()
 
 @app.teardown_appcontext
 def close_db(exc):
@@ -35,10 +62,10 @@ def get_user_id():
 def init_db():
     db = sqlite3.connect(DB_PATH)
     db.executescript("""
-        CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0, user_id INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, customer_phone TEXT, customer_name TEXT DEFAULT '', debt REAL DEFAULT 0, user_id INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0 INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, customer_phone TEXT, customer_name TEXT DEFAULT '', debt REAL DEFAULT 0 INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS sale_items (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, product_id INTEGER NOT NULL, qty INTEGER NOT NULL, price REAL NOT NULL);
-        CREATE TABLE IF NOT EXISTS debts (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, total REAL DEFAULT 0, paid REAL DEFAULT 0, user_id INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS debts (id INTEGER PRIMARY KEY AUTOINCREMENT, phone TEXT UNIQUE NOT NULL, full_name TEXT NOT NULL, total REAL DEFAULT 0, paid REAL DEFAULT 0 INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     """)
     try:
         for table in ['products', 'sales', 'debts']:
@@ -60,7 +87,7 @@ def init_db():
 
 CSS = "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');:root{--bg:#0a0e1a;--card:#111827;--border:#1e293b;--primary:#3b82f6;--green:#10b981;--red:#ef4444;--yellow:#f59e0b;--text:#f1f5f9;--dim:#94a3b8}*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}.nav{background:rgba(17,24,39,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 24px;height:70px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}.nav-brand{font-size:24px;font-weight:800;background:linear-gradient(135deg,#3b82f6,#10b981);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.nav-links{display:flex;gap:6px}.nav-links a{color:var(--dim);text-decoration:none;padding:10px 16px;border-radius:12px;font-size:15px;font-weight:600;transition:.2s}.nav-links a:hover{color:var(--text);background:rgba(255,255,255,.05)}.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;transition:.3s}.card:hover{border-color:rgba(59,130,246,.3)}.btn{padding:14px 28px;border-radius:14px;border:none;font-weight:700;font-size:16px;cursor:pointer;color:#fff;transition:.2s;display:inline-flex;align-items:center;gap:8px;text-decoration:none}.btn:active{transform:scale(.97)}.btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 4px 15px rgba(59,130,246,.3)}.btn-green{background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 15px rgba(16,185,129,.3)}.btn-red{background:linear-gradient(135deg,#ef4444,#dc2626)}.btn-gray{background:#334155}.btn-sm{padding:10px 16px;font-size:14px;border-radius:10px}.input{width:100%;padding:16px 18px;border-radius:14px;background:rgba(15,23,42,.8);color:#fff;border:2px solid var(--border);font-size:16px;font-family:inherit;transition:.2s;outline:none}.input:focus{border-color:var(--primary);box-shadow:0 0 0 4px rgba(59,130,246,.2)}.grid{display:grid;gap:20px}.g2{grid-template-columns:repeat(2,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.stat-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;position:relative;overflow:hidden}.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--primary),var(--green))}.stat-label{font-size:15px;color:var(--dim);margin-bottom:10px;font-weight:600}.stat-value{font-size:36px;font-weight:900;letter-spacing:-1px}.table-wrap{overflow-x:auto;border-radius:20px;border:1px solid var(--border)}table{width:100%;border-collapse:collapse}th{background:rgba(15,23,42,.5);padding:16px 18px;text-align:left;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:700}td{padding:16px 18px;border-top:1px solid var(--border);font-size:15px}tr:hover td{background:rgba(255,255,255,.02)}.badge{display:inline-block;padding:6px 12px;border-radius:999px;font-size:13px;font-weight:700;letter-spacing:.5px}.badge-green{background:rgba(16,185,129,.15);color:#34d399}.badge-red{background:rgba(239,68,68,.15);color:#f87171}.badge-blue{background:rgba(59,130,246,.15);color:#60a5fa}.cart-item{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:14px;margin-bottom:10px;transition:.2s}.cart-item:hover{border-color:rgba(59,130,246,.3)}.qty-btn{width:40px;height:40px;border-radius:12px;border:none;background:var(--primary);color:#fff;font-weight:700;font-size:18px;cursor:pointer;transition:.2s}.qty-btn:hover{background:#2563eb}.qty-btn:active{transform:scale(.9)}.total-bar{background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(59,130,246,.1));border:1px solid rgba(16,185,129,.2);border-radius:20px;padding:24px;margin-top:20px}.total-amount{font-size:40px;font-weight:900;color:var(--green);letter-spacing:-1px}.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center}.modal-overlay.active{display:flex}.modal{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:36px;max-width:500px;width:90%}.mnav{display:none}@media(max-width:768px){.g2,.g4{grid-template-columns:1fr}.nav{padding:0 16px;height:60px}.nav-brand{font-size:20px}.nav-links{display:none}body{padding-bottom:90px}.mnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.98);backdrop-filter:blur(20px);border-top:1px solid var(--border);z-index:100;padding:8px 4px calc(8px + env(safe-area-inset-bottom));justify-content:space-around}.mnav a{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--dim);text-decoration:none;font-size:24px;padding:8px 14px;border-radius:12px;transition:.2s}.mnav a:active{background:rgba(59,130,246,.15);color:var(--primary)}.mnav span{font-size:11px;font-weight:700}.btn{padding:16px 28px;font-size:17px}.qty-btn{width:44px;height:44px;font-size:20px}.input{padding:18px;font-size:17px}.stat-value{font-size:32px}.stat-label{font-size:14px}h1{font-size:28px!important}h2{font-size:22px!important}}"
 
-NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuvlar</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/logout' style='color:var(--red);'>🚪 Chiqish</a></div></div>"
+NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuvlar</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/db'>🗄️ Database</a></div></div>"
 
 MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a></div>"
 
@@ -111,17 +138,90 @@ def logout():
     session.clear()
     return redirect("/login")
 
+
+@app.route("/db")
+def db_page():
+    db_name = session.get('db_name')
+    return RP("<div style='padding:24px;max-width:600px;margin:0 auto;'><h1 style='font-size:32px;margin-bottom:24px;'>🗄️ Database</h1>{%if db_name%}<div class='card' style='margin-bottom:20px;border-color:rgba(16,185,129,.4);'><div style='display:flex;align-items:center;gap:12px;'><div style='font-size:48px;'>✅</div><div><div style='font-size:14px;color:var(--dim);'>Ulangan database</div><div style='font-size:24px;font-weight:800;color:var(--green);'>{{db_name}}</div></div></div></div><div class='grid g2'><a href='/dashboard' class='btn btn-primary' style='padding:18px;justify-content:center;'>📊 Dashboard</a><a href='/db/disconnect' class='btn btn-red' style='padding:18px;justify-content:center;'>🔌 Uzish</a></div>{%else%}<div class='card' style='margin-bottom:20px;'><h2 style='margin-bottom:16px;'>➕ Yangi database yaratish</h2><form method='POST' action='/db/create'><input class='input' name='db_name' placeholder='Database nomi (masalan: myshop)' required pattern='[a-zA-Z0-9_]+' title='Faqat harf, raqam, underscore'><input class='input' name='password' type='password' placeholder='Parol' required style='margin-top:12px;'><button class='btn btn-green' style='width:100%;padding:18px;margin-top:16px;'>🚀 Yaratish</button></form></div><div class='card'><h2 style='margin-bottom:16px;'>🔗 Mavjud database ga ulanish</h2><form method='POST' action='/db/connect'><input class='input' name='db_name' placeholder='Database nomi' required pattern='[a-zA-Z0-9_]+'><input class='input' name='password' type='password' placeholder='Parol' required style='margin-top:12px;'><button class='btn btn-primary' style='width:100%;padding:18px;margin-top:16px;'>🔌 Ulanish</button></form></div>{%endif%}</div>", db_name=db_name)
+
+@app.route("/db/create", methods=["POST"])
+def db_create():
+    db_name = request.form.get("db_name", "").strip()
+    password = request.form.get("password", "")
+    
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]+$', db_name):
+        return "❌ Noto'g'ri nom! Faqat harf, raqam, underscore.", 400
+    if len(password) < 4:
+        return "❌ Parol kamida 4 ta belgi!", 400
+    
+    db_path = os.path.join(os.path.dirname(DB_PATH), f"{db_name}.db")
+    pass_path = os.path.join(os.path.dirname(DB_PATH), f"{db_name}.pass")
+    
+    # Agar baza mavjud bo'lsa
+    if os.path.exists(db_path):
+        return "❌ Bu nom allaqachon mavjud! Boshqa nom tanlang yoki ulaning.", 400
+    
+    # Parolni saqlash (hash)
+    import hashlib
+    pass_hash = hashlib.sha256(password.encode()).hexdigest()
+    with open(pass_path, 'w') as f:
+        f.write(pass_hash)
+    
+    # Database yaratish
+    init_user_db(db_path)
+    
+    session['db_name'] = db_name
+    return redirect("/dashboard")
+
+@app.route("/db/connect", methods=["POST"])
+def db_connect():
+    db_name = request.form.get("db_name", "").strip()
+    password = request.form.get("password", "")
+    
+    import re
+    if not re.match(r'^[a-zA-Z0-9_]+$', db_name):
+        return "❌ Noto'g'ri nom!", 400
+    
+    db_path = os.path.join(os.path.dirname(DB_PATH), f"{db_name}.db")
+    pass_path = os.path.join(os.path.dirname(DB_PATH), f"{db_name}.pass")
+    
+    # Baza mavjudligini tekshirish
+    if not os.path.exists(db_path):
+        return "❌ Bu nomda database yo'q! Avval yarating.", 400
+    
+    # Parolni tekshirish
+    if not os.path.exists(pass_path):
+        return "❌ Parol fayli topilmadi!", 400
+    
+    import hashlib
+    pass_hash = hashlib.sha256(password.encode()).hexdigest()
+    with open(pass_path, 'r') as f:
+        saved_hash = f.read().strip()
+    
+    if pass_hash != saved_hash:
+        return "❌ Noto'g'ri parol!", 400
+    
+    session['db_name'] = db_name
+    return redirect("/dashboard")
+
+@app.route("/db/disconnect")
+def db_disconnect():
+    session.pop('db_name', None)
+    return redirect("/db")
+
+
 @app.route("/dashboard")
 def dashboard():
     db = get_db()
     uid = get_user_id()
     today = datetime.now().strftime("%Y-%m-%d")
-    ts = db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=? AND user_id=?", (today, uid)).fetchone()[0]
-    tc = db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=? AND user_id=?", (today, uid)).fetchone()[0]
-    tp = db.execute("SELECT COUNT(*) FROM products WHERE user_id=?", (uid,)).fetchone()[0]
-    ls = db.execute("SELECT COUNT(*) FROM products WHERE stock<=min_stock AND user_id=?", (uid,)).fetchone()[0]
-    td = db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE total>0 AND user_id=?", (uid,)).fetchone()[0]
-    ws = db.execute("SELECT date(created_at) d,SUM(total) s FROM sales WHERE created_at>=date('now','-7 days') AND user_id=? GROUP BY d ORDER BY d", (uid,)).fetchall()
+    ts = db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=?", (today, uid)).fetchone()[0]
+    tc = db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=?", (today, uid)).fetchone()[0]
+    tp = db.execute("SELECT COUNT(*) FROM products", (uid,)).fetchone()[0]
+    ls = db.execute("SELECT COUNT(*) FROM products WHERE stock<=min_stock", (uid,)).fetchone()[0]
+    td = db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE total>0", (uid,)).fetchone()[0]
+    ws = db.execute("SELECT date(created_at) d,SUM(total) s FROM sales WHERE created_at>=date('now','-7 days') GROUP BY d ORDER BY d", (uid,)).fetchall()
     top = db.execute("SELECT p.name,SUM(si.qty) t FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales s ON s.id=si.sale_id WHERE s.user_id=? GROUP BY si.product_id ORDER BY t DESC LIMIT 5", (uid,)).fetchall()
     return RP("""<div style="padding:24px;max-width:1400px;margin:0 auto;"><h1 style="font-size:32px;margin-bottom:24px;">📊 Dashboard</h1><div class="grid g4" style="margin-bottom:24px;"><div class="stat-card"><div class="stat-label">💰 Bugungi savdo</div><div class="stat-value">{{"{:,.0f}".format(ts)}}</div></div><div class="stat-card"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{tc}}</div></div><div class="stat-card"><div class="stat-label">📦 Mahsulotlar</div><div class="stat-value">{{tp}}</div></div><div class="stat-card"><div class="stat-label">⚠️ Kam qoldiq</div><div class="stat-value">{{ls}}</div></div></div><div class="grid g2"><div class="card"><h2 style="margin-bottom:16px;">🏆 Top 5</h2>{%for p in top%}<div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);"><span>{{p.name}}</span><span class="badge badge-blue">{{p.t}} dona</span></div>{%else%}<p style="color:var(--dim);text-align:center;">Hali savdo yo'q</p>{%endfor%}</div><div class="card"><h2 style="margin-bottom:16px;">📈 7 kunlik</h2>{%for s in ws%}<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span style="color:var(--dim);">{{s.d}}</span><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(s.s)}}</span></div>{%endfor%}</div></div>{%if td>0%}<div class="card" style="margin-top:24px;"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="color:var(--dim);">💸 Jami qarz</div><div style="font-size:32px;font-weight:800;color:var(--yellow);">{{"{:,.0f}".format(td)}} so'm</div></div><a href="/debts" class="btn btn-primary">Qarzdorlar →</a></div></div>{%endif%}</div>""", ts=ts, tc=tc, tp=tp, ls=ls, td=td, ws=ws, top=top)
 
@@ -130,7 +230,7 @@ def products_list():
     db = get_db()
     uid = get_user_id()
     q = request.args.get("q", "")
-    rows = db.execute("SELECT * FROM products WHERE user_id=? AND (name LIKE ? OR barcode LIKE ?) ORDER BY id DESC", (uid, "%"+q+"%", "%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products WHERE user_id=? ORDER BY id DESC", (uid,)).fetchall()
+    rows = db.execute("SELECT * FROM products AND (name LIKE ? OR barcode LIKE ?) ORDER BY id DESC", (uid, "%"+q+"%", "%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products ORDER BY id DESC", (uid,)).fetchall()
     low = [r for r in rows if r["stock"] <= r["min_stock"]]
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><div style="display:flex;justify-content:space-between;margin-bottom:24px;"><h1 style="font-size:32px;">📦 Mahsulotlar ({{rows|length}})</h1><a href="/products/new" class="btn btn-green">➕ Yangi</a></div><form method="GET" style="display:flex;gap:8px;margin-bottom:20px;"><input class="input" name="q" value="{{q}}" placeholder="🔍 Qidiruv..." style="margin:0;"><button class="btn btn-primary">Qidirish</button></form>{%if low%}<div class="card" style="margin-bottom:20px;border-color:rgba(239,68,68,.4);"><h3 style="color:var(--red);">⚠️ Kam qoldiq ({{low|length}})</h3>{%for p in low[:5]%}<div style="padding:4px 0;">• {{p.name}} — {{p.stock}}/{{p.min_stock}}</div>{%endfor%}</div>{%endif%}<div class="table-wrap"><table><thead><tr><th>Nomi</th><th>Barcode</th><th>Narxi</th><th>Qoldiq</th><th>Amallar</th></tr></thead><tbody>{%for p in rows%}<tr><td><strong>{{p.name}}</strong></td><td style="font-family:monospace;color:var(--dim);">{{p.barcode}}</td><td>{{"{:,.0f}".format(p.price)}}</td><td>{%if p.stock<=p.min_stock%}<span class="badge badge-red">{{p.stock}}</span>{%else%}{{p.stock}}{%endif%}</td><td><a href="/products/{{p.id}}/edit" class="btn btn-gray btn-sm">✏️</a><form method="POST" action="/products/{{p.id}}/delete" style="display:inline;"><button class="btn btn-red btn-sm">🗑</button></form></td></tr>{%else%}<tr><td colspan="5" style="text-align:center;color:var(--dim);padding:40px;">Mahsulot yo'q</td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows, q=q, low=low)
 
@@ -139,7 +239,7 @@ def product_new():
     if request.method == "POST":
         db = get_db()
         try:
-            db.execute("INSERT INTO products(name,barcode,price,min_stock,stock,user_id) VALUES(?,?,?,?,?,?)", (request.form["name"].strip(), request.form["barcode"].strip(), float(request.form["price"]), int(request.form.get("min_stock", 5)), int(request.form.get("stock", 0)), get_user_id()))
+            db.execute("INSERT INTO products(name,barcode,price,min_stock,stock) VALUES(?,?,?,?,?,?)", (request.form["name"].strip(), request.form["barcode"].strip(), float(request.form["price"]), int(request.form.get("min_stock", 5)), int(request.form.get("stock", 0)), get_user_id()))
             db.commit()
             return redirect("/products")
         except:
@@ -151,10 +251,10 @@ def product_new():
 def product_edit(pid):
     db = get_db()
     if request.method == "POST":
-        db.execute("UPDATE products SET name=?,barcode=?,price=?,min_stock=?,stock=? WHERE id=? AND user_id=?", (request.form["name"], request.form["barcode"], float(request.form["price"]), int(request.form["min_stock"]), int(request.form["stock"]), pid, get_user_id()))
+        db.execute("UPDATE products SET name=?,barcode=?,price=?,min_stock=?,stock=? WHERE id=?", (request.form["name"], request.form["barcode"], float(request.form["price"]), int(request.form["min_stock"]), int(request.form["stock"]), pid, get_user_id()))
         db.commit()
         return redirect("/products")
-    p = db.execute("SELECT * FROM products WHERE id=? AND user_id=?", (pid, get_user_id())).fetchone()
+    p = db.execute("SELECT * FROM products WHERE id=?", (pid, get_user_id())).fetchone()
     if not p:
         return "Yo'q", 404
     return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;"><div class="card"><h1 style="margin-bottom:24px;">✏️ Tahrirlash</h1><form method="POST"><input class="input" name="name" value="{{p.name}}" required><input class="input" name="barcode" value="{{p.barcode}}" required><input class="input" type="number" step="0.01" name="price" value="{{p.price}}" required><div class="grid g2"><input class="input" type="number" name="min_stock" value="{{p.min_stock}}"><input class="input" type="number" name="stock" value="{{p.stock}}"></div><button class="btn btn-green" style="width:100%;padding:16px;">💾 Saqlash</button></form></div></div>""", p=p)
@@ -162,7 +262,7 @@ def product_edit(pid):
 @app.route("/products/<int:pid>/delete", methods=["POST"])
 def product_delete(pid):
     db = get_db()
-    db.execute("DELETE FROM products WHERE id=? AND user_id=?", (pid, get_user_id()))
+    db.execute("DELETE FROM products WHERE id=?", (pid, get_user_id()))
     db.commit()
     return redirect("/products")
 
@@ -209,7 +309,7 @@ def api_pbc():
     if not c:
         return jsonify({"error": "code kerak"}), 400
     db = get_db()
-    p = db.execute("SELECT * FROM products WHERE barcode=? AND user_id=?", (c, get_user_id())).fetchone()
+    p = db.execute("SELECT * FROM products WHERE barcode=?", (c, get_user_id())).fetchone()
     if not p:
         return jsonify({"error": "topilmadi"}), 404
     return jsonify(dict(p))
@@ -235,7 +335,7 @@ def api_checkout():
             qty = item.get("qty", 0)
             if not pid or qty <= 0:
                 raise Exception("Noto'g'ri ma'lumot")
-            p = db.execute("SELECT * FROM products WHERE id=? AND user_id=?", (pid, uid)).fetchone()
+            p = db.execute("SELECT * FROM products WHERE id=?", (pid, uid)).fetchone()
             if not p:
                 raise Exception("Mahsulot topilmadi")
             if p["stock"] < qty:
@@ -243,13 +343,13 @@ def api_checkout():
             prepared.append((p, qty))
             total += p["price"] * qty
         debt = total if payment == "credit" else 0
-        cur = db.execute("INSERT INTO sales(total,payment,customer_phone,customer_name,debt,user_id) VALUES(?,?,?,?,?,?)", (total, payment, phone, cname, debt, uid))
+        cur = db.execute("INSERT INTO sales(total,payment,customer_phone,customer_name,debt) VALUES(?,?,?,?,?,?)", (total, payment, phone, cname, debt, uid))
         sid = cur.lastrowid
         for p, q in prepared:
             db.execute("INSERT INTO sale_items(sale_id,product_id,qty,price) VALUES(?,?,?,?)", (sid, p["id"], q, p["price"]))
             db.execute("UPDATE products SET stock=stock-? WHERE id=?", (q, p["id"]))
         if payment == "credit" and phone:
-            db.execute("INSERT INTO debts(phone,full_name,total,paid,user_id) VALUES(?,?,?,0,?) ON CONFLICT(phone) DO UPDATE SET full_name=?,total=total+?", (phone, cname or "Mijoz", debt, uid, cname or "Mijoz", debt))
+            db.execute("INSERT INTO debts(phone,full_name,total,paid) VALUES(?,?,?,0,?) ON CONFLICT(phone) DO UPDATE SET full_name=?,total=total+?", (phone, cname or "Mijoz", debt, uid, cname or "Mijoz", debt))
         db.commit()
         return jsonify({"sale_id": sid, "total": total})
     except Exception as e:
@@ -495,7 +595,7 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#667eea 0%
 def debts_page():
     db = get_db()
     uid = get_user_id()
-    rows = db.execute("SELECT * FROM debts WHERE total>0 AND user_id=? ORDER BY total DESC", (uid,)).fetchall()
+    rows = db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC", (uid,)).fetchall()
     td = sum(r["total"] for r in rows)
     tp = sum(r["paid"] for r in rows) if rows else 0
     return RP("""<div style="padding:24px;max-width:1000px;margin:0 auto;"><h1 style="font-size:32px;margin-bottom:24px;">💳 Qarzdorlar</h1><div class="grid g3" style="margin-bottom:20px;"><div class="stat-card"><div class="stat-label">💸 Jami qarz</div><div class="stat-value" style="color:var(--red);">{{"{:,.0f}".format(td)}}</div></div><div class="stat-card"><div class="stat-label">✅ To'langan</div><div class="stat-value" style="color:var(--green);">{{"{:,.0f}".format(tp)}}</div></div><div class="stat-card"><div class="stat-label">👥 Qarzdorlar</div><div class="stat-value">{{rows|length}}</div></div></div><div class="table-wrap"><table><thead><tr><th>Ism Familiya</th><th>Telefon</th><th>Qarz</th><th>To'lov</th></tr></thead><tbody>{%for d in rows%}<tr><td><strong>{{d.full_name}}</strong></td><td style="font-family:monospace;">{{d.phone}}</td><td style="color:var(--red);font-weight:700;">{{"{:,.0f}".format(d.total)}}</td><td><form method="POST" action="/debts/{{d.id}}/pay" style="display:flex;gap:6px;"><input type="number" name="amount" placeholder="Summa" required style="width:120px;padding:8px;background:var(--bg);color:#fff;border:1px solid var(--border);border-radius:8px;"><button class="btn btn-green btn-sm">💰</button></form></td></tr>{%else%}<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:40px;">✅ Qarzdor yo'q</td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows, td=td, tp=tp)
@@ -504,7 +604,7 @@ def debts_page():
 def debt_pay(did):
     amt = float(request.form["amount"])
     db = get_db()
-    db.execute("UPDATE debts SET total=MAX(0,total-?), paid=COALESCE(paid,0)+? WHERE id=? AND user_id=?", (amt, amt, did, get_user_id()))
+    db.execute("UPDATE debts SET total=MAX(0,total-?), paid=COALESCE(paid,0)+? WHERE id=?", (amt, amt, did, get_user_id()))
     db.commit()
     return redirect("/debts")
 
@@ -514,13 +614,13 @@ def reports_page():
     uid = get_user_id()
     p = request.args.get("period", "day")
     w = {"day": "date(created_at)=date('now')", "week": "created_at>=date('now','-7 days')", "month": "created_at>=date('now','-30 days')"}.get(p, "date(created_at)=date('now')")
-    st = db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w+" AND user_id=?", (uid,)).fetchone()
-    bp = db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" AND user_id=? GROUP BY payment", (uid,)).fetchall()
+    st = db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w+"", (uid,)).fetchone()
+    bp = db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" GROUP BY payment", (uid,)).fetchall()
     tp = db.execute("SELECT p.name,SUM(si.qty) q,SUM(si.qty*si.price) s FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales sl ON sl.id=si.sale_id WHERE "+w+" AND sl.user_id=? GROUP BY si.product_id ORDER BY s DESC LIMIT 5", (uid,)).fetchall()
-    dc_ = db.execute("SELECT COUNT(*) c FROM debts WHERE total>0 AND user_id=?", (uid,)).fetchone()[0]
-    given = db.execute("SELECT COALESCE(SUM(total+paid),0) FROM debts WHERE user_id=?", (uid,)).fetchone()[0]
-    paid_ = db.execute("SELECT COALESCE(SUM(paid),0) FROM debts WHERE user_id=?", (uid,)).fetchone()[0]
-    rest = db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE user_id=?", (uid,)).fetchone()[0]
+    dc_ = db.execute("SELECT COUNT(*) c FROM debts WHERE total>0", (uid,)).fetchone()[0]
+    given = db.execute("SELECT COALESCE(SUM(total+paid),0) FROM debts", (uid,)).fetchone()[0]
+    paid_ = db.execute("SELECT COALESCE(SUM(paid),0) FROM debts", (uid,)).fetchone()[0]
+    rest = db.execute("SELECT COALESCE(SUM(total),0) FROM debts", (uid,)).fetchone()[0]
     ac = (st["s"]/st["c"]) if st["c"] > 0 else 0
     return RP("""<div style="padding:16px;max-width:900px;margin:0 auto;"><h1 style="font-size:28px;margin-bottom:16px;">📈 Hisobotlar</h1><div style="display:flex;gap:8px;margin-bottom:16px;"><a href="?period=day" class="btn {%if period=='day'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;">📅 Kun</a><a href="?period=week" class="btn {%if period=='week'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;">Hafta</a><a href="?period=month" class="btn {%if period=='month'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;">Oy</a></div><button class="btn" onclick="window.print()" style="width:100%;padding:16px;margin-bottom:16px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);">📄 Hisobot yaratish</button><div class="grid g2" style="margin-bottom:12px;"><div class="stat-card"><div class="stat-label">💰 Jami savdo</div><div class="stat-value" style="color:var(--green);">{{"{:,.0f}".format(st.s)}} so'm</div></div><div class="stat-card"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{st.c}}</div></div><div class="stat-card"><div class="stat-label">📊 O'rtacha</div><div class="stat-value">{{"{:,.0f}".format(ac)}}</div></div><div class="stat-card"><div class="stat-label">👥 Qarzdorlar</div><div class="stat-value">{{dc_}}</div></div></div><div class="card" style="margin-bottom:12px;"><h2 style="margin-bottom:12px;">💸 Qarz holati</h2><div class="grid g2"><div style="background:rgba(59,130,246,.1);border-radius:12px;padding:14px;"><div class="stat-label">Jami berilgan</div><div style="font-size:20px;font-weight:800;">{{"{:,.0f}".format(given)}} so'm</div></div><div style="background:rgba(16,185,129,.1);border-radius:12px;padding:14px;"><div class="stat-label">To'langan</div><div style="font-size:20px;font-weight:800;color:var(--green);">{{"{:,.0f}".format(paid_)}} so'm</div></div><div style="background:rgba(239,68,68,.1);border-radius:12px;padding:14px;grid-column:span 2;"><div class="stat-label">Qolgan qarz</div><div style="font-size:20px;font-weight:800;color:var(--red);">{{"{:,.0f}".format(rest)}} so'm</div></div></div></div><div class="grid g2"><div class="card"><h2 style="margin-bottom:12px;">💳 To'lov turlari</h2>{%for x in bp%}<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>{{x.payment|upper}}</span><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(x.s)}}</span></div>{%else%}<p style="color:var(--dim);text-align:center;">Ma'lumot yo'q</p>{%endfor%}</div><div class="card"><h2 style="margin-bottom:12px;">🏆 Top 5</h2>{%for x in tp%}<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><div><div style="font-weight:600;">{{x.name}}</div><div style="font-size:11px;color:var(--dim);">{{x.q}} dona</div></div><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(x.s)}}</span></div>{%else%}<p style="color:var(--dim);text-align:center;">Hali savdo yo'q</p>{%endfor%}</div></div></div>""", period=p, st=st, bp=bp, tp=tp, dc_=dc_, given=given, paid_=paid_, rest=rest, ac=ac)
 
@@ -557,7 +657,7 @@ def start_bot_thread():
                 "👋 <b>{}</b>\n\n"
                 "🏪 SmartStore POS\n\n"
                 "✅ Sizning ID: <code>{}</code>\n\n"
-                "👇 Ilovaga o'ting:".format(user.full_name, user_id),
+                "👇 Ilovaga o'ting:".format(user.full_name),
                 reply_markup=kb
             )
         
