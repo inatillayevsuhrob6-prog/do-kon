@@ -269,111 +269,189 @@ def receipt(sid):
             return send_file(buf, download_name=f"chek-{sid}.pdf", mimetype="application/pdf")
         except:
             return "PDF xatosi", 500
-    return render_template_string("""<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Chek #{{s.id}}</title>
+    return render_template_string("""<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Chek #{{ '{:06d}'.format(s.id) }} • SmartStore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-body{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;font-family:'Inter',sans-serif;padding:0;margin:0}
-.np{position:fixed;top:20px;left:0;right:0;text-align:center;z-index:10;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:0 16px}
-.np button,.np a{padding:12px 24px;border:none;border-radius:12px;cursor:pointer;font-size:14px;font-weight:600;text-decoration:none;color:#fff;box-shadow:0 4px 15px rgba(0,0,0,.2);transition:.2s}
-.np button:hover,.np a:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.3)}
-.rc{max-width:420px;margin:100px auto 40px;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:0}
-.header{background:linear-gradient(135deg,#3b82f6,#10b981);padding:32px 28px;color:#fff;text-align:center}
-.header h1{font-size:28px;font-weight:900;margin:0;letter-spacing:-0.5px}
-.header .sub{font-size:12px;opacity:.9;margin-top:6px}
-.header .id{font-size:16px;font-weight:700;margin-top:12px;background:rgba(255,255,255,.2);display:inline-block;padding:6px 16px;border-radius:999px}
-.body{padding:28px}
-.items{margin-bottom:20px}
-.item{padding:14px 0;border-bottom:1px solid #f1f5f9;display:flex;flex-direction:column;gap:4px}
-.item:last-child{border-bottom:none}
-.item-top{display:flex;justify-content:space-between;align-items:start;gap:12px}
-.item-name{font-weight:600;font-size:15px;color:#0f172a;flex:1}
-.item-subtotal{font-weight:700;color:#10b981;font-size:15px;white-space:nowrap}
-.item-detail{font-size:12px;color:#64748b}
-.total-section{background:#f8fafc;margin:0 -28px;padding:24px 28px;border-top:2px dashed #e2e8f0}
-.total-row{display:flex;justify-content:space-between;padding:4px 0;font-size:14px;color:#64748b}
-.total-row.grand{font-size:24px;font-weight:900;color:#0f172a;padding:12px 0 0;margin-top:8px;border-top:1px solid #e2e8f0}
-.total-row.grand .amount{color:#10b981}
-.info{margin-top:20px;padding:16px;background:#f1f5f9;border-radius:12px}
-.info-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px}
-.info-row .label{color:#64748b}
-.info-row .value{font-weight:600;color:#0f172a}
-.debt-box{margin-top:16px;padding:14px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;text-align:center;border:2px solid #f59e0b}
-.debt-box .label{font-size:12px;color:#92400e;font-weight:600;text-transform:uppercase;letter-spacing:1px}
-.debt-box .amount{font-size:24px;font-weight:900;color:#b45309;margin-top:4px}
-.footer{text-align:center;padding:24px;color:#94a3b8;font-size:12px;background:#0f172a;color:#94a3b8}
-.footer .emoji{font-size:32px;display:block;margin-bottom:8px}
-.payment-badge{display:inline-block;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
-.payment-badge.cash{background:#d1fae5;color:#065f46}
-.payment-badge.card{background:#dbeafe;color:#1e40af}
-.payment-badge.credit{background:#fee2e2;color:#991b1b}
-.payment-badge.mixed{background:#fef3c7;color:#92400e}
-@media print{
-  body{background:#fff;padding:0}
-  .np{display:none!important}
-  .rc{margin:0;box-shadow:none;border-radius:0;max-width:100%}
-  .header{border-radius:0}
-}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%);min-height:100vh;padding:20px 16px;color:#0f172a}
+
+/* TEPADAGI TUGMALAR */
+.toolbar{position:fixed;top:16px;left:0;right:0;display:flex;gap:10px;justify-content:center;z-index:100;padding:0 16px;flex-wrap:wrap}
+.toolbar button,.toolbar a{padding:12px 22px;border:none;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.2);transition:.2s;display:inline-flex;align-items:center;gap:8px;font-family:inherit}
+.toolbar button:hover,.toolbar a:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.3)}
+.btn-print{background:linear-gradient(135deg,#3b82f6,#2563eb)}
+.btn-pdf{background:linear-gradient(135deg,#10b981,#059669)}
+.btn-close{background:linear-gradient(135deg,#ef4444,#dc2626)}
+
+/* CHEK KARTASI */
+.receipt{max-width:440px;margin:90px auto 40px;background:#fff;border-radius:28px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.1);position:relative}
+.receipt::before{content:'';position:absolute;top:-1px;left:0;right:0;height:6px;background:linear-gradient(90deg,#3b82f6,#10b981,#f59e0b,#ef4444)}
+
+/* HEADER */
+.r-header{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);padding:36px 32px 32px;color:#fff;text-align:center;position:relative;overflow:hidden}
+.r-header::after{content:'';position:absolute;top:-50%;right:-20%;width:200px;height:200px;background:radial-gradient(circle,rgba(59,130,246,.3),transparent 70%);border-radius:50%}
+.r-logo{font-size:42px;margin-bottom:8px;filter:drop-shadow(0 4px 12px rgba(59,130,246,.5))}
+.r-brand{font-size:26px;font-weight:900;letter-spacing:-.5px;background:linear-gradient(135deg,#60a5fa,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;position:relative;z-index:1}
+.r-tagline{font-size:11px;color:#94a3b8;letter-spacing:3px;text-transform:uppercase;margin-top:6px;font-weight:600;position:relative;z-index:1}
+.r-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);margin:20px 0 16px;position:relative;z-index:1}
+.r-id{display:inline-block;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.4);padding:8px 20px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#60a5fa;letter-spacing:1px;position:relative;z-index:1}
+.r-date{font-size:12px;color:#cbd5e1;margin-top:10px;font-weight:500;position:relative;z-index:1}
+
+/* BODY */
+.r-body{padding:28px 32px}
+.r-section-title{font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.r-section-title::after{content:'';flex:1;height:1px;background:#e2e8f0}
+
+/* MAHSULOTLAR */
+.r-item{padding:14px 0;border-bottom:1px dashed #e2e8f0;display:flex;flex-direction:column;gap:6px}
+.r-item:last-of-type{border-bottom:none}
+.r-item-row{display:flex;justify-content:space-between;align-items:start;gap:12px}
+.r-item-name{font-weight:600;font-size:15px;color:#0f172a;flex:1;line-height:1.4}
+.r-item-total{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:#10b981;white-space:nowrap}
+.r-item-detail{font-size:12px;color:#64748b;font-family:'JetBrains Mono',monospace}
+
+/* JAMI */
+.r-summary{background:linear-gradient(135deg,#f8fafc,#f1f5f9);margin:24px -32px 0;padding:24px 32px;border-top:2px dashed #cbd5e1;border-bottom:2px dashed #cbd5e1}
+.r-row{display:flex;justify-content:space-between;padding:6px 0;font-size:14px;color:#64748b}
+.r-row .val{font-weight:600;color:#0f172a;font-family:'JetBrains Mono',monospace}
+.r-grand{display:flex;justify-content:space-between;align-items:center;padding:18px 0 4px;margin-top:10px;border-top:2px solid #0f172a}
+.r-grand-label{font-size:13px;font-weight:700;color:#0f172a;letter-spacing:2px;text-transform:uppercase}
+.r-grand-amount{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:900;color:#10b981;letter-spacing:-1px}
+
+/* TO'LOV VA MIJOZ */
+.r-info{margin-top:24px;display:flex;flex-direction:column;gap:12px}
+.r-info-row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0}
+.r-info-label{font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.r-info-value{font-size:14px;font-weight:700;color:#0f172a}
+.pay-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.5px}
+.pay-cash{background:#d1fae5;color:#065f46}
+.pay-card{background:#dbeafe;color:#1e40af}
+.pay-credit{background:#fee2e2;color:#991b1b}
+.pay-mixed{background:#fef3c7;color:#92400e}
+
+/* QARZ */
+.r-debt{margin-top:20px;padding:20px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2px solid #f59e0b;border-radius:16px;text-align:center;position:relative;overflow:hidden}
+.r-debt::before{content:'⚠️';position:absolute;top:-10px;right:-10px;font-size:60px;opacity:.15}
+.r-debt-label{font-size:11px;font-weight:800;color:#92400e;letter-spacing:3px;text-transform:uppercase}
+.r-debt-amount{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:900;color:#b45309;margin-top:6px;letter-spacing:-1px}
+
+/* FOOTER */
+.r-footer{background:#0f172a;padding:28px 32px;text-align:center;color:#94a3b8}
+.r-thanks{font-size:36px;margin-bottom:8px}
+.r-thanks-text{font-size:15px;font-weight:600;color:#f1f5f9;margin-bottom:4px}
+.r-thanks-sub{font-size:11px;color:#64748b;letter-spacing:2px;text-transform:uppercase}
+.r-barcode{margin-top:16px;padding-top:16px;border-top:1px solid #1e293b;font-family:'JetBrains Mono',monospace;font-size:10px;color:#475569;letter-spacing:2px}
+
+/* MOBIL */
 @media(max-width:500px){
-  .rc{margin:80px 12px 20px}
-  .np{top:10px}
-  .np button,.np a{padding:10px 16px;font-size:13px}
+  body{padding:12px 8px}
+  .receipt{margin:80px 0 20px;border-radius:20px}
+  .r-header{padding:28px 24px 24px}
+  .r-body{padding:24px}
+  .r-summary{margin:20px -24px 0;padding:20px 24px}
+  .r-footer{padding:24px}
+  .toolbar{top:8px;gap:6px}
+  .toolbar button,.toolbar a{padding:10px 16px;font-size:13px;border-radius:12px}
+  .r-brand{font-size:22px}
+  .r-grand-amount{font-size:26px}
 }
-</style></head><body>
-<div class="np">
-<button onclick="window.print()" style="background:linear-gradient(135deg,#3b82f6,#2563eb)">🖨 Chop etish</button>
-<a href="/sales/{{s.id}}/receipt?format=pdf" style="background:linear-gradient(135deg,#10b981,#059669)">📥 PDF yuklash</a>
-<button onclick="window.close()" style="background:linear-gradient(135deg,#ef4444,#dc2626)">✖ Yopish</button>
+
+/* CHOP */
+@media print{
+  body{background:#fff;padding:0;margin:0}
+  .toolbar{display:none!important}
+  .receipt{margin:0;box-shadow:none;border-radius:0;max-width:100%}
+  .r-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{margin:0;size:auto}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button class="btn-print" onclick="window.print()">🖨️ Chop etish</button>
+  <a class="btn-pdf" href="/sales/{{s.id}}/receipt?format=pdf">📥 PDF</a>
+  <button class="btn-close" onclick="window.close()">✕ Yopish</button>
 </div>
-<div class="rc">
-<div class="header">
-  <h1>🏪 SMARTSTORE</h1>
-  <div class="sub">Chek • {{s.created_at[:19]}}</div>
-  <div class="id">#{{ '{:06d}'.format(s.id) }}</div>
-</div>
-<div class="body">
-  <div class="items">
-  {%for it in items%}
-  <div class="item">
-    <div class="item-top">
-      <span class="item-name">{{it.name}}</span>
-      <span class="item-subtotal">{{'{:,.0f}'.format(it.qty*it.price)}} so'm</span>
+
+<div class="receipt">
+  <div class="r-header">
+    <div class="r-logo">🏪</div>
+    <div class="r-brand">SMARTSTORE</div>
+    <div class="r-tagline">Professional POS</div>
+    <div class="r-divider"></div>
+    <div class="r-id"># {{ '{:06d}'.format(s.id) }}</div>
+    <div class="r-date">📅 {{ s.created_at[:19] }}</div>
+  </div>
+
+  <div class="r-body">
+    <div class="r-section-title">Mahsulotlar</div>
+    {% for it in items %}
+    <div class="r-item">
+      <div class="r-item-row">
+        <span class="r-item-name">{{ it.name }}</span>
+        <span class="r-item-total">{{ '{:,.0f}'.format(it.qty * it.price) }}</span>
+      </div>
+      <div class="r-item-detail">{{ it.qty }} × {{ '{:,.0f}'.format(it.price) }} so'm</div>
     </div>
-    <div class="item-detail">{{it.qty}} × {{'{:,.0f}'.format(it.price)}} so'm</div>
-  </div>
-  {%endfor%}
-  </div>
-  <div class="total-section">
-    <div class="total-row"><span>Mahsulotlar soni</span><span>{{items|length}} ta</span></div>
-    <div class="total-row"><span>Jami miqdor</span><span>{% set ns = namespace(q=0) %}{% for it in items %}{% set ns.q = ns.q + it.qty %}{% endfor %}{{ns.q}} dona</span></div>
-    <div class="total-row grand"><span>JAMI:</span><span class="amount">{{'{:,.0f}'.format(s.total)}} so'm</span></div>
-  </div>
-  <div class="info">
-    <div class="info-row"><span class="label">To'lov turi</span>
-      <span class="value">
-        {%if s.payment=='cash'%}<span class="payment-badge cash">💵 NAQD</span>
-        {%elif s.payment=='card'%}<span class="payment-badge card">💳 KARTA</span>
-        {%elif s.payment=='credit'%}<span class="payment-badge credit">📝 NASIYA</span>
-        {%else%}<span class="payment-badge mixed">🔀 ARALASH</span>{%endif%}
-      </span>
+    {% endfor %}
+
+    <div class="r-summary">
+      <div class="r-row"><span>Mahsulotlar soni</span><span class="val">{{ items|length }} ta</span></div>
+      <div class="r-row"><span>Jami dona</span><span class="val">{% set ns = namespace(q=0) %}{% for it in items %}{% set ns.q = ns.q + it.qty %}{% endfor %}{{ ns.q }} dona</span></div>
+      <div class="r-grand">
+        <span class="r-grand-label">JAMI</span>
+        <span class="r-grand-amount">{{ '{:,.0f}'.format(s.total) }}</span>
+      </div>
+      <div style="text-align:right;font-size:11px;color:#64748b;margin-top:2px;font-weight:600;letter-spacing:1px">SO'M</div>
     </div>
-    {%if s.customer_name%}<div class="info-row"><span class="label">Mijoz</span><span class="value">{{s.customer_name}}</span></div>{%endif%}
-    {%if s.customer_phone%}<div class="info-row"><span class="label">📱 Telefon</span><span class="value">{{s.customer_phone}}</span></div>{%endif%}
-    <div class="info-row"><span class="label">Chek raqami</span><span class="value">#{{ '{:06d}'.format(s.id) }}</span></div>
+
+    <div class="r-info">
+      <div class="r-info-row">
+        <span class="r-info-label">To'lov</span>
+        {% if s.payment == 'cash' %}<span class="pay-badge pay-cash">💵 NAQD</span>
+        {% elif s.payment == 'card' %}<span class="pay-badge pay-card">💳 KARTA</span>
+        {% elif s.payment == 'credit' %}<span class="pay-badge pay-credit">📝 NASIYA</span>
+        {% else %}<span class="pay-badge pay-mixed">🔀 ARALASH</span>{% endif %}
+      </div>
+      {% if s.customer_name %}
+      <div class="r-info-row">
+        <span class="r-info-label">👤 Mijoz</span>
+        <span class="r-info-value">{{ s.customer_name }}</span>
+      </div>
+      {% endif %}
+      {% if s.customer_phone %}
+      <div class="r-info-row">
+        <span class="r-info-label">📱 Telefon</span>
+        <span class="r-info-value" style="font-family:'JetBrains Mono',monospace">{{ s.customer_phone }}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if s.debt > 0 %}
+    <div class="r-debt">
+      <div class="r-debt-label">⚠️ QARZ SUMMASI</div>
+      <div class="r-debt-amount">{{ '{:,.0f}'.format(s.debt) }} so'm</div>
+    </div>
+    {% endif %}
   </div>
-  {%if s.debt>0%}
-  <div class="debt-box">
-    <div class="label">⚠️ QARZ</div>
-    <div class="amount">{{'{:,.0f}'.format(s.debt)}} so'm</div>
+
+  <div class="r-footer">
+    <div class="r-thanks">🙏</div>
+    <div class="r-thanks-text">Xaridingiz uchun rahmat!</div>
+    <div class="r-thanks-sub">SmartStore POS • 2026</div>
+    <div class="r-barcode">||| {{ '{:06d}'.format(s.id) }} {{ s.created_at[:10].replace('-','') }} |||</div>
   </div>
-  {%endif%}
 </div>
-<div class="footer">
-  <span class="emoji">🙏</span>
-  <div>Xaridingiz uchun rahmat!</div>
-  <div style="margin-top:8px;opacity:.7;">SmartStore POS © 2026</div>
-</div>
-</div>
-</body></html>""", s=s, items=items)
+
+</body>
+</html>""", s=s, items=items)
 
 @app.route("/debts")
 def debts_page():
