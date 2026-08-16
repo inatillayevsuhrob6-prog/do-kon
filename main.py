@@ -96,14 +96,31 @@ td{padding:14px 16px;border-top:1px solid var(--border);font-size:14px}tr:hover 
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center}.modal-overlay.active{display:flex}
 .modal{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px;max-width:480px;width:90%;animation:modalIn .3s ease}@keyframes modalIn{from{opacity:0;transform:scale(.95) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}.fade-in{animation:fadeIn .4s ease}
+.mnav{display:none}
+@media(max-width:768px){
+.mnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.98);backdrop-filter:blur(20px);border-top:1px solid var(--border);z-index:100;padding:6px 4px calc(6px + env(safe-area-inset-bottom));justify-content:space-around}
+.mnav a{display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--dim);text-decoration:none;font-size:20px;padding:6px 12px;border-radius:10px}
+.mnav a span{font-size:10px;font-weight:600}
+.mnav a:active{background:rgba(59,130,246,.15);color:var(--primary)}
+body{padding-bottom:80px}
+.nav-links{display:none}
+.btn{padding:14px 24px;font-size:15px}
+.qty-btn{width:44px;height:44px;font-size:20px}
+.input{padding:16px;font-size:16px}
+.total-amount{font-size:30px}
+}
 """
 
 NAV_HTML = """<div class="nav"><div class="nav-brand">🏪 SmartStore</div><div class="nav-links">
 <a href="/dashboard">📊 Dashboard</a><a href="/pos">🛒 Kassa</a><a href="/products">📦 Mahsulotlar</a>
 <a href="/sales">🧾 Sotuvlar</a><a href="/debts">💳 Qarzdorlar</a><a href="/reports">📈 Hisobot</a></div></div>"""
 
+TG_SCRIPT = "<script src='https://telegram.org/js/telegram-web-app.js'></script><script>if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();Telegram.WebApp.setHeaderColor('#0a0e1a');Telegram.WebApp.setBackgroundColor('#0a0e1a');}</script>"
+
+MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuvlar</span></a><a href='/reports'>📈<span>Hisobot</span></a></div>"
+
 def RP(tpl, **ctx):
-    full = "<!DOCTYPE html><html lang='uz'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'><title>SmartStore</title><style>" + CSS + "</style></head><body class='fade-in'>" + NAV_HTML + tpl + "</body></html>"
+    full = "<!DOCTYPE html><html lang='uz'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover'><title>SmartStore</title>" + TG_SCRIPT + "<style>" + CSS + "</style></head><body class='fade-in'>" + NAV_HTML + tpl + MOBILE_NAV + "</body></html>"
     return render_template_string(full, **ctx)
 
 # ═══════════════════════════════════════════
