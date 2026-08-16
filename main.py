@@ -7,7 +7,7 @@ from flask import Flask, request, redirect, render_template_string, send_file, j
 # ═══════════════════════════════════════════
 BOT_TOKEN = "8863204152:AAF-VbLwrDrnSl832BZchmMA6HhJmbfQgjs"
 OWNER_TG_ID = 123456789
-APP_URL = "http://localhost:5000"
+APP_URL = "https://smartstore-web-dvse.onrender.com"
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "smartstore.db")
 
 app = Flask(__name__)
