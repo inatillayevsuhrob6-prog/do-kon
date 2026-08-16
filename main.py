@@ -252,22 +252,39 @@ def pos():
     function cq(i,d){C[i].qty=Math.max(1,C[i].qty+d);rc()}function cc(){C=[];rc()}
     async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\\nYangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}
     function bp(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.1;o.start();o.stop(c.currentTime+.1)}catch{}}
-    function ss(){
+    async function ss(){
   if(sc) return;
+  const region = document.getElementById('sr');
+  region.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--dim)">📷 Kamera yuklanmoqda...</div>';
   sc = new Html5Qrcode("sr");
-  sc.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: { width: 250, height: 150 } },
-    function(txt){
-      if(txt && txt !== ls){ ls = txt; ab(txt); setTimeout(function(){ ls = ''; }, 800); }
-    },
-    function(){}
-  ).then(function(){
-    document.getElementById('sb').style.display = 'flex';
-  }).catch(function(e){
-    alert('Kamera xatosi: ' + e);
-    sc = null;
-  });
+  let cams = [];
+  try { cams = await Html5Qrcode.getCameras(); } catch(e) {}
+  let camId = null;
+  if(cams.length){
+    camId = cams[0].id;
+    for(const c of cams){ if(/back|rear|environment|orqa/i.test(c.label||'')){ camId = c.id; break; } }
+  }
+  const onOk = (txt)=>{ if(txt && txt!==ls){ ls=txt; ab(txt); if(navigator.vibrate) navigator.vibrate(80); setTimeout(()=>ls='',700);} };
+  const onErr = ()=>{};
+  const hq = {
+    fps: 60,
+    qrbox: { width: 260, height: 140 },
+    videoConstraints: {
+      facingMode: { ideal: "environment" },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      frameRate: { ideal: 60 },
+      advanced: [{ focusMode: "continuous" }]
+    }
+  };
+  let ok = false;
+  if(camId){ try { await sc.start(camId, hq, onOk, onErr); ok = true; } catch(e){} }
+  if(!ok){ try { await sc.start({facingMode:{ideal:"environment"}}, hq, onOk, onErr); ok = true; } catch(e){} }
+  if(!ok){ try { await sc.start({facingMode:"environment"}, {fps:30, qrbox:{width:250,height:140}}, onOk, onErr); ok = true; } catch(e){} }
+  if(!ok && cams.length){ try { await sc.start(cams[0].id, {fps:30, qrbox:{width:250,height:140}}, onOk, onErr); ok = true; } catch(e){} }
+  if(!ok){ sc=null; region.innerHTML='<div style="padding:20px;text-align:center;color:var(--red)">❌ Kamera ruxsati kerak</div>'; alert('Kamera ochilmadi. Brauzerda ruxsat bering.'); return; }
+  try { await sc.applyVideoConstraints({ advanced: [{ torch: true, focusMode: "continuous" }] }); } catch(e){}
+  document.getElementById('sb').style.display='flex';
 }
 
 function xs(){if(sc){sc.stop().then(()=>{sc.clear();sc=null});document.getElementById('sb').style.display='none'}}
