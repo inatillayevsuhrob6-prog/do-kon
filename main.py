@@ -1,4 +1,4 @@
-import os, sqlite3, threading, io, time, re, hashlib, re, hashlib
+import os, sqlite3, threading, io, time, re, hashlib, json, re, hashlib
 from datetime import datetime
 from flask import Flask, request, redirect, render_template_string, send_file, jsonify, g, session, session
 
@@ -8,6 +8,27 @@ DB_PATH = "/tmp/smartstore.db" if os.environ.get("RENDER") else os.path.join(os.
 
 app = Flask(__name__)
 app.secret_key = "smartstore-2024"
+
+# Database registry (JSON faylda saqlanadi)
+DB_REGISTRY_PATH = os.path.join(DATA_DIR, "db_registry.json")
+
+def load_registry():
+    """Barcha database'larni yuklash"""
+    try:
+        if os.path.exists(DB_REGISTRY_PATH):
+            with open(DB_REGISTRY_PATH, 'r') as f:
+                return json.load(f)
+    except:
+        pass
+    return {}
+
+def save_registry(registry):
+    """Database'larni JSON ga saqlash"""
+    try:
+        with open(DB_REGISTRY_PATH, 'w') as f:
+            json.dump(registry, f, indent=2)
+    except Exception as e:
+        print("Registry saqlash xatosi:", e)
 
 def get_db_path():
     db_name = session.get('db_name')
@@ -91,6 +112,8 @@ def index():
 @app.route("/db")
 def db_page():
     db_name = session.get('db_name')
+    registry = load_registry()
+    existing_dbs = list(registry.keys())
     return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;">
     <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🗄️ Database</h1>
     {%if db_name%}
@@ -131,7 +154,7 @@ def db_page():
         </form>
     </div>
     {%endif%}
-    </div>""", db_name=db_name)
+    </div>""", db_name=db_name, existing_dbs=existing_dbs)
 
 @app.route("/db/create", methods=["POST"])
 def db_create():
@@ -146,6 +169,11 @@ def db_create():
     if os.path.exists(db_path):
         return db_error("Bu nom allaqachon mavjud! Ulanishdan foydalaning.")
     pass_hash = hashlib.sha256(password.encode()).hexdigest()
+    # JSON registry ga saqlash
+    registry = load_registry()
+    registry[db_name] = {"password_hash": pass_hash, "created_at": datetime.now().isoformat()}
+    save_registry(registry)
+    # Eski .pass fayl ham saqlash (backup)
     with open(pass_path, 'w') as f:
         f.write(pass_hash)
     # Database yaratish va jadvallarni初始化
@@ -172,11 +200,18 @@ def db_connect():
     pass_path = os.path.join(os.path.dirname(DB_PATH), db_name + ".pass")
     if not os.path.exists(db_path):
         return db_error("Bu nomda database yo'q! Avval yarating.")
-    if not os.path.exists(pass_path):
-        return db_error("Parol fayli topilmadi!")
-    with open(pass_path, 'r') as f:
-        saved = f.read().strip()
-    if hashlib.sha256(password.encode()).hexdigest() != saved:
+    # Avval JSON dan tekshirish
+    registry = load_registry()
+    if db_name in registry:
+        saved_hash = registry[db_name].get("password_hash", "")
+    elif os.path.exists(pass_path):
+        # Eski .pass fayldan o'qish
+        with open(pass_path, 'r') as f:
+            saved_hash = f.read().strip()
+    else:
+        return db_error("Bu baza ro'yxatda yo'q!")
+    
+    if hashlib.sha256(password.encode()).hexdigest() != saved_hash:
         return db_error("Noto'g'ri parol!")
     session['db_name'] = db_name
     session['db_message'] = "Database '" + db_name + "' ga ulandi!"
