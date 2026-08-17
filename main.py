@@ -40,7 +40,14 @@ def save_registry(registry):
         print("Registry save error:", e)
 
 def ensure_session_id():
-    """Har bir foydalanuvchi uchun unique session ID"""
+    """Har bir foydalanuvchi uchun unique ID (Telegram user ID yoki session)"""
+    # Avval URL dan Telegram user ID ni tekshirish
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        session['session_id'] = 'tg_' + tg_user
+        return session['session_id']
+    
+    # Session'dan olish
     if 'session_id' not in session:
         session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
     return session['session_id']
@@ -55,14 +62,19 @@ def get_user_db_path():
     if db_name not in registry:
         return DB_PATH
     
-    # Xavfsizlik: faqat owner yoki parol bilan ulanganlar kira oladi
+    # XAVFSIZLIK: Faqat egasi YOKI ruxsat berilganlar kira oladi
     entry = registry[db_name]
     current_session = session.get('session_id')
     allowed_sessions = entry.get('allowed_sessions', [])
     
-    if entry.get('owner_session') == current_session or current_session in allowed_sessions:
+    if entry.get('owner_session') == current_session:
         return os.path.join(DATA_DIR, db_name + ".db")
     
+    if current_session in allowed_sessions:
+        return os.path.join(DATA_DIR, db_name + ".db")
+    
+    # HUQUQ YO'Q - default bazaga qaytarish
+    session.pop('db_name', None)
     return DB_PATH
 
 def get_db():
@@ -143,7 +155,35 @@ NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div cl
 
 MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
 
-TG_SCRIPT = "<script src='https://telegram.org/js/telegram-web-app.js'></script><script>if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();}</script>"
+TG_SCRIPT = """<script src='https://telegram.org/js/telegram-web-app.js'></script>
+<script>
+if(window.Telegram&&Telegram.WebApp){
+  Telegram.WebApp.ready();
+  Telegram.WebApp.expand();
+  var tgUser = Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user ? Telegram.WebApp.initDataUnsafe.user.id : null;
+  if(tgUser){
+    try{localStorage.setItem('ss_tg_user', tgUser);}catch(e){}
+    if(location.search.indexOf('tg_user=') === -1){
+      var sep = location.search ? '&' : '?';
+      location.replace(location.pathname + location.search + sep + 'tg_user=' + tgUser);
+    }
+  }
+}
+(function(){
+  var p = new URLSearchParams(location.search).get('tg_user');
+  if(p){
+    try{localStorage.setItem('ss_tg_user', p);}catch(e){}
+  } else {
+    try{
+      var s = localStorage.getItem('ss_tg_user');
+      if(s && location.pathname !== '/db'){
+        var sep = location.search ? '&' : '?';
+        location.replace(location.pathname + location.search + sep + 'tg_user=' + s);
+      }
+    }catch(e){}
+  }
+})();
+</script>"""
 
 def RP(tpl, **ctx):
     full = "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'><title>SmartStore</title>" + TG_SCRIPT + "<style>" + CSS + "</style></head><body>" + NAV_HTML + tpl + MOBILE_NAV + "</body></html>"
@@ -154,6 +194,10 @@ def RP(tpl, **ctx):
 # ═══════════════════════════════════════
 @app.route("/")
 def index():
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        session['session_id'] = 'tg_' + tg_user
+        session['tg_user'] = tg_user
     ensure_session_id()
     return redirect("/dashboard")
 
@@ -165,10 +209,10 @@ def db_page():
     existing_dbs = list(registry.keys())
     current_session = session.get('session_id')
     
-    # Foydalanuvchiga tegishli bazalar (parollari bilan)
-    my_dbs = [{"name": name, "password": data.get("password", ""), "is_owner": data.get('owner_session') == current_session} 
+    # FAQAT egasiga tegishli bazalar (boshqalarniki KO'RINMAYDI)
+    my_dbs = [{"name": name, "password": data.get("password", ""), "is_owner": True} 
               for name, data in registry.items() 
-              if data.get('owner_session') == current_session or current_session in data.get('allowed_sessions', [])]
+              if data.get('owner_session') == current_session]
     
     return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;">
     <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🗄️ Database Boshqaruvi</h1>
@@ -295,23 +339,30 @@ def db_connect():
     registry = load_registry()
     
     if db_name not in registry:
-        return db_error("Bu nomda database yo'q! Avval yarating.")
+        return db_error("Bu nomda database yo'q!")
     
     entry = registry[db_name]
     saved_password = entry.get("password", "")
+    current_session = session.get('session_id')
     
+    # Agar egasi bo'lsa - avtomatik ulanadi
+    if entry.get('owner_session') == current_session:
+        session['db_name'] = db_name
+        session['db_message'] = "O'z bazangizga o'tdingiz: " + db_name
+        return redirect("/dashboard")
+    
+    # Boshqanikiga - faqat parol bilan
     if password != saved_password:
         return db_error("Noto'g'ri parol!")
     
-    # Foydalanuvchini ruxsat berilganlar ro'yxatiga qo'shish
-    current_session = session.get('session_id')
+    # Ruxsat berilganlar ro'yxatiga qo'shish
     if current_session not in entry.get('allowed_sessions', []):
         entry.setdefault('allowed_sessions', []).append(current_session)
         registry[db_name] = entry
         save_registry(registry)
     
     session['db_name'] = db_name
-    session['db_message'] = "Database '" + db_name + "' ga ulandi!"
+    session['db_message'] = "Database '" + db_name + "' ga parol bilan ulandi!"
     return redirect("/dashboard")
 
 @app.route("/db/switch/<db_name>")
@@ -632,7 +683,8 @@ def start_bot_thread():
 👋 <b>{}</b>, xush kelibsiz!
 
 👇 Ilovani oching:""".format(user.full_name)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=APP_URL))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
+            app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
             await update.message.reply_html(info, reply_markup=kb)
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query; await query.answer()
