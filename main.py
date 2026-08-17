@@ -733,105 +733,139 @@ def sales_list():
 
 @app.route("/sales/<int:sid>/receipt")
 def receipt(sid):
-    # ensure_session_id() chaqirmaymiz - chek ochiq bo'lishi kerak
-    ft=request.args.get("format","html"); db=get_db()
-    try:
-        s=db.execute("SELECT * FROM sales WHERE id=?",(sid,)).fetchone()
-    except:
-        # Agar default baza bo'sh bo'lsa, barcha bazalardan qidirish
-        import glob
-        for db_file in glob.glob(os.path.join(DATA_DIR, "*.db")):
-            try:
-                temp_db = sqlite3.connect(db_file)
-                temp_db.row_factory = sqlite3.Row
-                s = temp_db.execute("SELECT * FROM sales WHERE id=?",(sid,)).fetchone()
-                temp_db.close()
-                if s:
-                    # Topilgan bazadan items ni ham olish
-                    db = sqlite3.connect(db_file)
-                    db.row_factory = sqlite3.Row
-                    break
-            except:
-                continue
-        else:
-            return "Chek topilmadi", 404
-    if not s: return "Yo'q",404
-    items=db.execute("SELECT si.*,p.name FROM sale_items si JOIN products p ON p.id=si.product_id WHERE si.sale_id=?",(sid,)).fetchall()
-    if ft=="pdf":
-        try:
-            from reportlab.lib.pagesizes import A6; from reportlab.pdfgen import canvas as pc; from reportlab.lib.units import mm
-            buf=io.BytesIO(); c=pc.Canvas(buf,pagesize=A6); w,h=A6
-            c.setFont("Helvetica-Bold",14); c.drawCentredString(w/2,h-20*mm,"SMARTSTORE")
-            c.setFont("Helvetica",9); c.drawCentredString(w/2,h-27*mm,"#"+str(sid)+" "+str(s["created_at"])[:19])
-            c.setFont("Helvetica",10); y=h-40*mm
-            for it in items: c.drawString(10*mm,y,it["name"][:25]); c.drawRightString(w-10*mm,y,"{}x{}={}".format(it["qty"],int(it["price"]),int(it["qty"]*it["price"]))); y-=5*mm
-            y-=5*mm
-            if s["customer_name"]: c.drawString(10*mm,y,"Mijoz: "+s["customer_name"]); y-=4*mm
-            if s["customer_phone"]: c.drawString(10*mm,y,"Tel: "+s["customer_phone"])
-            c.setFont("Helvetica-Bold",12); c.drawRightString(w-10*mm,22*mm,"JAMI:{} so'm".format(int(s["total"])))
-            c.setFont("Helvetica",9); c.drawCentredString(w/2,12*mm,s["payment"].upper()); c.save(); buf.seek(0)
-            return send_file(buf,download_name="chek-{}.pdf".format(sid),mimetype="application/pdf")
-        except: return "PDF xatosi",500
+    ft = request.args.get("format", "html")
     
-    # Professional HTML chek
-    html = """<!DOCTYPE html>
+    # Barcha bazalardan sale ni qidirish
+    import glob
+    s = None
+    items = []
+    db = None
+    
+    for db_file in glob.glob(os.path.join(DATA_DIR, "*.db")):
+        try:
+            temp_db = sqlite3.connect(db_file)
+            temp_db.row_factory = sqlite3.Row
+            s = temp_db.execute("SELECT * FROM sales WHERE id=?", (sid,)).fetchone()
+            if s:
+                items = temp_db.execute("SELECT si.*, p.name FROM sale_items si JOIN products p ON p.id=si.product_id WHERE si.sale_id=?", (sid,)).fetchall()
+                db = temp_db
+                break
+            temp_db.close()
+        except Exception as e:
+            print(f"DB search error: {e}")
+            continue
+    
+    if not s:
+        return render_template_string("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:sans-serif;background:#f5f5f5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.box{background:#fff;padding:40px;border-radius:20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.1)}.icon{font-size:64px;margin-bottom:20px}h1{color:#ef4444;margin-bottom:10px}p{color:#666}</style></head><body><div class='box'><div class='icon'>❌</div><h1>Chek topilmadi</h1><p>Bu chek mavjud emas yoki o'chirilgan</p><a href='/dashboard' style='display:inline-block;margin-top:20px;padding:12px 24px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:10px;'>← Panelga qaytish</a></div></body></html>")
+    
+    # PDF format
+    if ft == "pdf":
+        try:
+            from reportlab.lib.pagesizes import A6
+            from reportlab.pdfgen import canvas as pc
+            from reportlab.lib.units import mm
+            buf = io.BytesIO()
+            c = pc.Canvas(buf, pagesize=A6)
+            w, h = A6
+            c.setFont("Helvetica-Bold", 16)
+            c.drawCentredString(w/2, h-20*mm, "SMARTSTORE")
+            c.setFont("Helvetica", 10)
+            c.drawCentredString(w/2, h-28*mm, f"Chek #{sid} - {str(s['created_at'])[:19]}")
+            c.line(10*mm, h-32*mm, w-10*mm, h-32*mm)
+            y = h - 40*mm
+            c.setFont("Helvetica-Bold", 11)
+            for it in items:
+                name = it["name"][:20]
+                qty_price = f"{it['qty']} x {int(it['price'])}"
+                total = f"{int(it['qty'] * it['price'])}"
+                c.drawString(10*mm, y, name)
+                c.drawCentredString(w/2, y, qty_price)
+                c.drawRightString(w-10*mm, y, total)
+                y -= 6*mm
+            c.line(10*mm, y-2*mm, w-10*mm, y-2*mm)
+            y -= 10*mm
+            c.setFont("Helvetica-Bold", 14)
+            c.drawRightString(w-10*mm, y, f"JAMI: {int(s['total'])} so'm")
+            y -= 8*mm
+            c.setFont("Helvetica", 10)
+            c.drawString(10*mm, y, f"To'lov: {s['payment'].upper()}")
+            if s["customer_name"]:
+                y -= 5*mm
+                c.drawString(10*mm, y, f"Mijoz: {s['customer_name']}")
+            if s["customer_phone"]:
+                y -= 5*mm
+                c.drawString(10*mm, y, f"Tel: {s['customer_phone']}")
+            if s["debt"] > 0:
+                y -= 5*mm
+                c.setFillColorRGB(0.8, 0, 0)
+                c.drawString(10*mm, y, f"QARZ: {int(s['debt'])} so'm")
+            c.save()
+            buf.seek(0)
+            if db:
+                db.close()
+            return send_file(buf, download_name=f"chek-{sid}.pdf", mimetype="application/pdf")
+        except Exception as e:
+            print(f"PDF error: {e}")
+            if db:
+                db.close()
+            return "PDF xatosi", 500
+    
+    # HTML format - Professional dizayn
+    html_template = """<!DOCTYPE html>
 <html lang="uz">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Chek #{{ '{:06d}'.format(s.id) }} • SmartStore</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f093fb 100%);min-height:100vh;padding:20px 16px;color:#0f172a}
-.toolbar{position:fixed;top:16px;left:0;right:0;display:flex;gap:10px;justify-content:center;z-index:100;padding:0 16px;flex-wrap:wrap}
-.toolbar button,.toolbar a{padding:12px 22px;border:none;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.2);transition:.2s;display:inline-flex;align-items:center;gap:8px;font-family:inherit}
-.toolbar button:hover,.toolbar a:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.3)}
+body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px 16px}
+.toolbar{position:fixed;top:16px;left:0;right:0;display:flex;gap:10px;justify-content:center;z-index:100;flex-wrap:wrap;padding:0 16px}
+.toolbar button,.toolbar a{padding:12px 20px;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;color:#fff;box-shadow:0 4px 15px rgba(0,0,0,.2);transition:.2s;font-family:inherit}
+.toolbar button:hover{transform:translateY(-2px)}
 .btn-print{background:linear-gradient(135deg,#3b82f6,#2563eb)}
 .btn-pdf{background:linear-gradient(135deg,#10b981,#059669)}
 .btn-close{background:linear-gradient(135deg,#ef4444,#dc2626)}
-.receipt{max-width:440px;margin:90px auto 40px;background:#fff;border-radius:28px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.35);position:relative}
-.receipt::before{content:'';position:absolute;top:-1px;left:0;right:0;height:6px;background:linear-gradient(90deg,#3b82f6,#10b981,#f59e0b,#ef4444)}
-.r-header{background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);padding:36px 32px 32px;color:#fff;text-align:center;position:relative;overflow:hidden}
-.r-logo{font-size:42px;margin-bottom:8px}
-.r-brand{font-size:26px;font-weight:900;background:linear-gradient(135deg,#60a5fa,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.r-tagline{font-size:11px;color:#94a3b8;letter-spacing:3px;text-transform:uppercase;margin-top:6px;font-weight:600}
-.r-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);margin:20px 0 16px}
-.r-id{display:inline-block;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.4);padding:8px 20px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#60a5fa}
-.r-date{font-size:12px;color:#cbd5e1;margin-top:10px;font-weight:500}
-.r-body{padding:28px 32px}
-.r-section-title{font-size:11px;font-weight:700;color:#94a3b8;letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.r-section-title::after{content:'';flex:1;height:1px;background:#e2e8f0}
-.r-item{padding:14px 0;border-bottom:1px dashed #e2e8f0}
-.r-item:last-of-type{border-bottom:none}
-.r-item-row{display:flex;justify-content:space-between;align-items:start;gap:12px}
-.r-item-name{font-weight:600;font-size:15px;color:#0f172a;flex:1}
-.r-item-total{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15px;color:#10b981}
-.r-item-detail{font-size:12px;color:#64748b;font-family:'JetBrains Mono',monospace;margin-top:4px}
-.r-summary{background:linear-gradient(135deg,#f8fafc,#f1f5f9);margin:24px -32px 0;padding:24px 32px;border-top:2px dashed #cbd5e1;border-bottom:2px dashed #cbd5e1}
-.r-row{display:flex;justify-content:space-between;padding:6px 0;font-size:14px;color:#64748b}
-.r-row .val{font-weight:600;color:#0f172a;font-family:'JetBrains Mono',monospace}
-.r-grand{display:flex;justify-content:space-between;align-items:center;padding:18px 0 4px;margin-top:10px;border-top:2px solid #0f172a}
-.r-grand-label{font-size:13px;font-weight:700;color:#0f172a;letter-spacing:2px;text-transform:uppercase}
-.r-grand-amount{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:900;color:#10b981}
-.r-info{margin-top:24px;display:flex;flex-direction:column;gap:12px}
-.r-info-row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0}
-.r-info-label{font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase}
-.r-info-value{font-size:14px;font-weight:700;color:#0f172a}
-.pay-badge{display:inline-flex;padding:6px 14px;border-radius:999px;font-size:12px;font-weight:800}
-.pay-cash{background:#d1fae5;color:#065f46}
-.pay-card{background:#dbeafe;color:#1e40af}
-.pay-credit{background:#fee2e2;color:#991b1b}
-.pay-mixed{background:#fef3c7;color:#92400e}
-.r-debt{margin-top:20px;padding:20px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2px solid #f59e0b;border-radius:16px;text-align:center}
-.r-debt-label{font-size:11px;font-weight:800;color:#92400e;letter-spacing:3px;text-transform:uppercase}
-.r-debt-amount{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:900;color:#b45309;margin-top:6px}
-.r-footer{background:#0f172a;padding:28px 32px;text-align:center;color:#94a3b8}
-.r-thanks{font-size:36px;margin-bottom:8px}
-.r-thanks-text{font-size:15px;font-weight:600;color:#f1f5f9;margin-bottom:4px}
-.r-thanks-sub{font-size:11px;color:#64748b;letter-spacing:2px;text-transform:uppercase}
-@media(max-width:500px){body{padding:12px 8px}.receipt{margin:80px 0 20px;border-radius:20px}.r-header{padding:28px 24px 24px}.r-body{padding:24px}.r-summary{margin:20px -24px 0;padding:20px 24px}.toolbar{top:8px;gap:6px}.toolbar button,.toolbar a{padding:10px 16px;font-size:13px}}
+.receipt{max-width:420px;margin:80px auto 40px;background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.header{background:linear-gradient(135deg,#1e293b,#0f172a);padding:32px 28px;color:#fff;text-align:center}
+.logo{font-size:40px;margin-bottom:8px}
+.brand{font-size:24px;font-weight:900;background:linear-gradient(135deg,#60a5fa,#34d399);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.tagline{font-size:10px;color:#94a3b8;letter-spacing:2px;text-transform:uppercase;margin-top:4px}
+.divider{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);margin:16px 0}
+.cheque-id{display:inline-block;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.4);padding:6px 16px;border-radius:20px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:#60a5fa}
+.date{font-size:11px;color:#cbd5e1;margin-top:8px}
+.body{padding:24px 28px}
+.section-title{font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:2px;text-transform:uppercase;margin-bottom:12px}
+.item{padding:12px 0;border-bottom:1px dashed #e2e8f0}
+.item:last-of-type{border-bottom:none}
+.item-row{display:flex;justify-content:space-between;align-items:start;gap:10px}
+.item-name{font-weight:600;font-size:14px;color:#0f172a;flex:1}
+.item-total{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:#10b981}
+.item-detail{font-size:11px;color:#64748b;font-family:'JetBrains Mono',monospace;margin-top:3px}
+.summary{background:#f8fafc;margin:20px -28px 0;padding:20px 28px;border-top:2px dashed #cbd5e1;border-bottom:2px dashed #cbd5e1}
+.row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;color:#64748b}
+.row .val{font-weight:600;color:#0f172a;font-family:'JetBrains Mono',monospace}
+.grand{display:flex;justify-content:space-between;align-items:center;padding:16px 0 0;margin-top:10px;border-top:2px solid #0f172a}
+.grand-label{font-size:12px;font-weight:700;color:#0f172a;letter-spacing:2px}
+.grand-amount{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:900;color:#10b981}
+.info{margin-top:20px}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8fafc;border-radius:10px;margin-bottom:8px}
+.info-label{font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase}
+.info-value{font-size:13px;font-weight:700;color:#0f172a}
+.badge{display:inline-block;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:800}
+.badge-cash{background:#d1fae5;color:#065f46}
+.badge-card{background:#dbeafe;color:#1e40af}
+.badge-credit{background:#fee2e2;color:#991b1b}
+.badge-mixed{background:#fef3c7;color:#92400e}
+.debt-box{margin-top:16px;padding:16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border:2px solid #f59e0b;border-radius:12px;text-align:center}
+.debt-label{font-size:10px;font-weight:800;color:#92400e;letter-spacing:2px}
+.debt-amount{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:900;color:#b45309;margin-top:4px}
+.footer{background:#0f172a;padding:24px 28px;text-align:center;color:#94a3b8}
+.thanks{font-size:32px;margin-bottom:6px}
+.thanks-text{font-size:14px;font-weight:600;color:#f1f5f9}
+.thanks-sub{font-size:10px;color:#64748b;letter-spacing:2px;margin-top:4px}
+@media(max-width:500px){body{padding:12px 8px}.receipt{margin:70px 0 20px;border-radius:20px}.header{padding:24px 20px}.body{padding:20px}.summary{margin:16px -20px 0;padding:16px 20px}.toolbar{top:8px;gap:6px}.toolbar button,.toolbar a{padding:10px 16px;font-size:13px}}
 @media print{body{background:#fff;padding:0}.toolbar{display:none!important}.receipt{margin:0;box-shadow:none;border-radius:0;max-width:100%}@page{margin:0}}
 </style>
 </head>
@@ -842,72 +876,75 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#667eea 0%
 <button class="btn-close" onclick="window.close()">✕ Yopish</button>
 </div>
 <div class="receipt">
-<div class="r-header">
-<div class="r-logo">🏪</div>
-<div class="r-brand">SMARTSTORE</div>
-<div class="r-tagline">Professional POS</div>
-<div class="r-divider"></div>
-<div class="r-id"># {{ '{:06d}'.format(s.id) }}</div>
-<div class="r-date">📅 {{ s.created_at[:19] }}</div>
+<div class="header">
+<div class="logo">🏪</div>
+<div class="brand">SMARTSTORE</div>
+<div class="tagline">Professional POS</div>
+<div class="divider"></div>
+<div class="cheque-id"># {{ '{:06d}'.format(s.id) }}</div>
+<div class="date">📅 {{ s.created_at[:19] }}</div>
 </div>
-<div class="r-body">
-<div class="r-section-title">Mahsulotlar</div>
+<div class="body">
+<div class="section-title">Mahsulotlar</div>
 {% for it in items %}
-<div class="r-item">
-<div class="r-item-row">
-<span class="r-item-name">{{ it.name }}</span>
-<span class="r-item-total">{{ '{:,.0f}'.format(it.qty * it.price) }}</span>
+<div class="item">
+<div class="item-row">
+<span class="item-name">{{ it.name }}</span>
+<span class="item-total">{{ '{:,.0f}'.format(it.qty * it.price) }}</span>
 </div>
-<div class="r-item-detail">{{ it.qty }} × {{ '{:,.0f}'.format(it.price) }} so'm</div>
+<div class="item-detail">{{ it.qty }} × {{ '{:,.0f}'.format(it.price) }} so'm</div>
 </div>
 {% endfor %}
-<div class="r-summary">
-<div class="r-row"><span>Mahsulotlar soni</span><span class="val">{{ items|length }} ta</span></div>
-<div class="r-row"><span>Jami dona</span><span class="val">{% set ns = namespace(q=0) %}{% for it in items %}{% set ns.q = ns.q + it.qty %}{% endfor %}{{ ns.q }} dona</span></div>
-<div class="r-grand">
-<span class="r-grand-label">JAMI</span>
-<span class="r-grand-amount">{{ '{:,.0f}'.format(s.total) }}</span>
+<div class="summary">
+<div class="row"><span>Mahsulotlar</span><span class="val">{{ items|length }} ta</span></div>
+<div class="row"><span>Jami dona</span><span class="val">{% set ns = namespace(q=0) %}{% for it in items %}{% set ns.q = ns.q + it.qty %}{% endfor %}{{ ns.q }}</span></div>
+<div class="grand">
+<span class="grand-label">JAMI</span>
+<span class="grand-amount">{{ '{:,.0f}'.format(s.total) }}</span>
 </div>
-<div style="text-align:right;font-size:11px;color:#64748b;margin-top:2px;font-weight:600">SO'M</div>
+<div style="text-align:right;font-size:10px;color:#64748b;margin-top:2px;font-weight:600">SO'M</div>
 </div>
-<div class="r-info">
-<div class="r-info-row">
-<span class="r-info-label">To'lov</span>
-{% if s.payment == 'cash' %}<span class="pay-badge pay-cash">💵 NAQD</span>
-{% elif s.payment == 'card' %}<span class="pay-badge pay-card">💳 KARTA</span>
-{% elif s.payment == 'credit' %}<span class="pay-badge pay-credit">📝 NASIYA</span>
-{% else %}<span class="pay-badge pay-mixed">🔀 ARALASH</span>{% endif %}
+<div class="info">
+<div class="info-row">
+<span class="info-label">To'lov</span>
+{% if s.payment == 'cash' %}<span class="badge badge-cash">💵 NAQD</span>
+{% elif s.payment == 'card' %}<span class="badge badge-card">💳 KARTA</span>
+{% elif s.payment == 'credit' %}<span class="badge badge-credit">📝 NASIYA</span>
+{% else %}<span class="badge badge-mixed">🔀 ARALASH</span>{% endif %}
 </div>
 {% if s.customer_name %}
-<div class="r-info-row">
-<span class="r-info-label">👤 Mijoz</span>
-<span class="r-info-value">{{ s.customer_name }}</span>
+<div class="info-row">
+<span class="info-label">👤 Mijoz</span>
+<span class="info-value">{{ s.customer_name }}</span>
 </div>
 {% endif %}
 {% if s.customer_phone %}
-<div class="r-info-row">
-<span class="r-info-label">📱 Telefon</span>
-<span class="r-info-value" style="font-family:'JetBrains Mono',monospace">{{ s.customer_phone }}</span>
+<div class="info-row">
+<span class="info-label">📱 Telefon</span>
+<span class="info-value" style="font-family:'JetBrains Mono',monospace">{{ s.customer_phone }}</span>
 </div>
 {% endif %}
 </div>
 {% if s.debt > 0 %}
-<div class="r-debt">
-<div class="r-debt-label">⚠️ QARZ SUMMASI</div>
-<div class="r-debt-amount">{{ '{:,.0f}'.format(s.debt) }} so'm</div>
+<div class="debt-box">
+<div class="debt-label">⚠️ QARZ SUMMASI</div>
+<div class="debt-amount">{{ '{:,.0f}'.format(s.debt) }} so'm</div>
 </div>
 {% endif %}
 </div>
-<div class="r-footer">
-<div class="r-thanks">🙏</div>
-<div class="r-thanks-text">Xaridingiz uchun rahmat!</div>
-<div class="r-thanks-sub">SmartStore POS • 2026</div>
+<div class="footer">
+<div class="thanks">🙏</div>
+<div class="thanks-text">Xaridingiz uchun rahmat!</div>
+<div class="thanks-sub">SmartStore POS • 2026</div>
 </div>
 </div>
 </body>
 </html>"""
     
-    return render_template_string(html, s=s, items=items)
+    result = render_template_string(html_template, s=s, items=items)
+    if db:
+        db.close()
+    return result
 
 
 @app.route("/debts")
