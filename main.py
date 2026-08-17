@@ -40,16 +40,45 @@ def save_registry(registry):
         print("Registry save error:", e)
 
 def get_user_id():
-    """Har bir brauzer/session uchun unique ID (Telegram ID YO'Q)"""
-    if 'session_id' not in session:
-        session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
-    return session['session_id']
+    """Har bir foydalanuvchi uchun GUARANTEED unique ID"""
+    # 1. Cookie dan olish
+    uid = request.cookies.get('ss_uid')
+    if uid and len(uid) == 32:
+        session['session_id'] = uid
+        return uid
+    
+    # 2. Session dan olish
+    if 'session_id' in session and len(session['session_id']) == 32:
+        return session['session_id']
+    
+    # 3. Yangi yaratish
+    new_uid = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
+    session['session_id'] = new_uid
+    
+    # Cookie ga yozish (30 kun)
+    from flask import make_response
+    # Response da cookie qo'shiladi (after_request da)
+    session['set_cookie'] = new_uid
+    
+    return new_uid
 
 def ensure_session_id():
-    """Har bir brauzer uchun unique session ID"""
-    if 'session_id' not in session:
-        session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
-    return session['session_id']
+    """Session ID ni kafolatlash (cookie ustuvor)"""
+    # Cookie dan olish
+    uid = request.cookies.get('ss_uid')
+    if uid and len(uid) == 32:
+        session['session_id'] = uid
+        return uid
+    
+    # Session dan
+    if 'session_id' in session and len(session['session_id']) == 32:
+        return session['session_id']
+    
+    # Yangi
+    new_uid = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
+    session['session_id'] = new_uid
+    session['set_cookie'] = new_uid
+    return new_uid
 
 def get_user_db_path():
     """Joriy foydalanuvchining database fayli (xavfsiz)"""
@@ -96,6 +125,14 @@ def get_db():
 def close_db(exc):
     db = g.pop("db", None)
     if db: db.close()
+
+@app.after_request
+def set_uid_cookie(response):
+    """Har bir response da UID cookie ni o'rnatish"""
+    if session.get('set_cookie'):
+        uid = session.pop('set_cookie')
+        response.set_cookie('ss_uid', uid, max_age=30*24*3600, httponly=True, samesite='None', secure=True)
+    return response
 
 def db_error(msg):
     return render_template_string("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>" + CSS + "</style></head><body>" + NAV_HTML + "<div style='padding:24px;max-width:500px;margin:60px auto;'><div class='card' style='text-align:center;padding:40px;'><div style='font-size:56px;margin-bottom:16px;'>❌</div><h1 style='font-size:24px;margin-bottom:12px;color:var(--red);'>Xato</h1><p style='color:var(--dim);margin-bottom:24px;'>" + msg + "</p><a href='/db' class='btn btn-primary' style='padding:16px;'>← Orqaga</a></div></div></body></html>")
@@ -154,7 +191,25 @@ NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div cl
 
 MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
 
-TG_SCRIPT = "<script src='https://telegram.org/js/telegram-web-app.js'></script><script>if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();}</script>"
+TG_SCRIPT = """<script src='https://telegram.org/js/telegram-web-app.js'></script>
+<script>
+if(window.Telegram&&Telegram.WebApp){
+  Telegram.WebApp.ready();
+  Telegram.WebApp.expand();
+}
+// LocalStorage dan UID olish yoki yaratish
+(function(){
+  var uid = localStorage.getItem('ss_uid');
+  if(!uid || uid.length !== 32){
+    uid = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');
+    localStorage.setItem('ss_uid', uid);
+  }
+  // Cookie ga yozish (agar yo'q bo'lsa)
+  if(document.cookie.indexOf('ss_uid=') === -1){
+    document.cookie = 'ss_uid=' + uid + '; path=/; max-age=2592000; SameSite=None; Secure';
+  }
+})();
+</script>"""
 
 def RP(tpl, **ctx):
     full = "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'><title>SmartStore</title>" + TG_SCRIPT + "<style>" + CSS + "</style></head><body>" + NAV_HTML + tpl + MOBILE_NAV + "</body></html>"
@@ -352,21 +407,31 @@ def db_switch(db_name):
 @app.route("/db/disconnect")
 def db_disconnect():
     # FAQAT joriy foydalanuvchining bazasini uzish
-    current_user = get_user_id()
+    current_uid = get_user_id()
     db_name = session.get('db_name')
+    
+    print(f"🔌 Disconnect: UID={current_uid}, DB={db_name}")
     
     # Agar custom baza bo'lsa - allowed_sessions dan olib tashlash
     if db_name and db_name != 'default':
         registry = load_registry()
         if db_name in registry:
             entry = registry[db_name]
-            # Egasi uzsa - hech narsa o'zgarmaydi (baza saqlanib qoladi)
+            owner = entry.get('owner_session', '')
+            allowed = entry.get('allowed_sessions', [])
+            
+            print(f"   Owner: {owner}, Allowed: {allowed}")
+            
+            # Egasi uzsa - baza SAQLANIB QOLADI, faqat session tozalanadi
+            if owner == current_uid:
+                print(f"   ✅ Egasi uzdi - baza saqlanib qoladi")
             # Boshqa ulangan uzsa - faqat o'zini olib tashlaydi
-            if entry.get('owner_session') != current_user:
-                if current_user in entry.get('allowed_sessions', []):
-                    entry['allowed_sessions'].remove(current_user)
-                    registry[db_name] = entry
-                    save_registry(registry)
+            elif current_uid in allowed:
+                allowed.remove(current_uid)
+                entry['allowed_sessions'] = allowed
+                registry[db_name] = entry
+                save_registry(registry)
+                print(f"   ✅ Ulangan uzdi - allowed_sessions dan olib tashlandi")
     
     # FAQAT shu foydalanuvchining session'ini tozalash
     session.pop('db_name', None)
@@ -659,8 +724,6 @@ def start_bot_thread():
 🧾 <b>Sotuvlar</b> — Cheklar tarixi, PDF formatda
 
 💳 <b>Qarzdorlar</b> — Ism, telefon, to'lov qabul qilish
-
-📈 <b>Hisobotlar</b> — Kun/Hafta/Oy, Top 5 mahsulot
 
 🗄️ <b>Database</b> — Har kim o'z bazasini yaratadi, parol bilan himoyalangan
 
