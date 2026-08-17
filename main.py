@@ -165,8 +165,10 @@ def db_page():
     existing_dbs = list(registry.keys())
     current_session = session.get('session_id')
     
-    # Foydalanuvchiga tegishli bazalar
-    my_dbs = [name for name, data in registry.items() if data.get('owner_session') == current_session or current_session in data.get('allowed_sessions', [])]
+    # Foydalanuvchiga tegishli bazalar (parollari bilan)
+    my_dbs = [{"name": name, "password": data.get("password", ""), "is_owner": data.get('owner_session') == current_session} 
+              for name, data in registry.items() 
+              if data.get('owner_session') == current_session or current_session in data.get('allowed_sessions', [])]
     
     return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;">
     <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🗄️ Database Boshqaruvi</h1>
@@ -193,9 +195,20 @@ def db_page():
     <div class="card" style="margin-bottom:16px;border-color:rgba(16,185,129,.3);">
         <h3 style="font-size:16px;margin-bottom:12px;color:var(--green);">📋 Sizning bazalaringiz ({{my_dbs|length}})</h3>
         {%for db in my_dbs%}
-        <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-weight:600;">🗄️ {{db}}</span>
-            <a href="/db/switch/{{db}}" class="btn btn-primary btn-sm">O'tish</a>
+        <div style="padding:12px 0;border-bottom:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div>
+                    <span style="font-weight:700;font-size:16px;">🗄️ {{db.name}}</span>
+                    {%if db.is_owner%}<span class="badge badge-green" style="margin-left:8px;">👑 Egasi</span>{%endif%}
+                </div>
+                <a href="/db/switch/{{db.name}}" class="btn btn-primary btn-sm">O'tish</a>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(59,130,246,.1);border-radius:10px;">
+                <span style="font-size:12px;color:var(--dim);">🔑 Parol:</span>
+                <code style="font-family:monospace;font-size:14px;color:#60a5fa;font-weight:700;letter-spacing:1px;">{{db.password}}</code>
+                <button onclick="navigator.clipboard.writeText('{{db.password}}');this.textContent='✅';setTimeout(()=>this.textContent='📋',1500)" 
+                        style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:4px 8px;" title="Nusxalash">📋</button>
+            </div>
         </div>
         {%endfor%}
     </div>
@@ -244,12 +257,11 @@ def db_create():
     if db_name in registry:
         return db_error("Bu nom allaqachon mavjud! Boshqa nom tanlang yoki ulaning.")
     
-    pass_hash = hashlib.sha256(password.encode()).hexdigest()
     current_session = session.get('session_id')
     
-    # JSON registry ga saqlash
+    # JSON registry ga saqlash (parol OCHIQ!)
     registry[db_name] = {
-        "password_hash": pass_hash,
+        "password": password,
         "owner_session": current_session,
         "allowed_sessions": [current_session],
         "created_at": datetime.now().isoformat()
@@ -268,7 +280,7 @@ def db_create():
     db.close()
     
     session['db_name'] = db_name
-    session['db_message'] = "Database '" + db_name + "' yaratildi va ulandi!"
+    session['db_message'] = "✅ Database '" + db_name + "' yaratildi! 🔑 Parol: " + password
     return redirect("/dashboard")
 
 @app.route("/db/connect", methods=["POST"])
@@ -286,9 +298,9 @@ def db_connect():
         return db_error("Bu nomda database yo'q! Avval yarating.")
     
     entry = registry[db_name]
-    saved_hash = entry.get("password_hash", "")
+    saved_password = entry.get("password", "")
     
-    if hashlib.sha256(password.encode()).hexdigest() != saved_hash:
+    if password != saved_password:
         return db_error("Noto'g'ri parol!")
     
     # Foydalanuvchini ruxsat berilganlar ro'yxatiga qo'shish
@@ -341,7 +353,7 @@ def dashboard():
     db_msg = session.pop('db_message', None)
     db_name = session.get('db_name', 'default')
     db_badge = '<span class="db-badge">🗄️ ' + db_name + '</span>' if db_name != 'default' else '<span class="db-badge" style="background:rgba(148,163,184,.15);color:var(--dim);">📁 Default</span>'
-    banner = '<div class="success-banner"><span style="font-size:26px;">🗄️</span><span style="font-size:15px;font-weight:700;color:var(--green);">' + db_msg + '</span></div>' if db_msg else ''
+    banner = '<div class="success-banner" style="flex-direction:column;align-items:flex-start;gap:8px;"><div style="display:flex;align-items:center;gap:12px;width:100%;"><span style="font-size:26px;">🗄️</span><span style="font-size:15px;font-weight:700;color:var(--green);flex:1;">' + db_msg + '</span></div></div>' if db_msg else ''
     
     return RP(banner + """<div style="padding:24px;max-width:1400px;margin:0 auto;">
     <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">📊 Dashboard """ + db_badge + """</h1>
