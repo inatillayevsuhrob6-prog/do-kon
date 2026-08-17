@@ -733,9 +733,28 @@ def sales_list():
 
 @app.route("/sales/<int:sid>/receipt")
 def receipt(sid):
-    ensure_session_id()
+    # ensure_session_id() chaqirmaymiz - chek ochiq bo'lishi kerak
     ft=request.args.get("format","html"); db=get_db()
-    s=db.execute("SELECT * FROM sales WHERE id=?",(sid,)).fetchone()
+    try:
+        s=db.execute("SELECT * FROM sales WHERE id=?",(sid,)).fetchone()
+    except:
+        # Agar default baza bo'sh bo'lsa, barcha bazalardan qidirish
+        import glob
+        for db_file in glob.glob(os.path.join(DATA_DIR, "*.db")):
+            try:
+                temp_db = sqlite3.connect(db_file)
+                temp_db.row_factory = sqlite3.Row
+                s = temp_db.execute("SELECT * FROM sales WHERE id=?",(sid,)).fetchone()
+                temp_db.close()
+                if s:
+                    # Topilgan bazadan items ni ham olish
+                    db = sqlite3.connect(db_file)
+                    db.row_factory = sqlite3.Row
+                    break
+            except:
+                continue
+        else:
+            return "Chek topilmadi", 404
     if not s: return "Yo'q",404
     items=db.execute("SELECT si.*,p.name FROM sale_items si JOIN products p ON p.id=si.product_id WHERE si.sale_id=?",(sid,)).fetchall()
     if ft=="pdf":
