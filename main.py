@@ -39,15 +39,27 @@ def save_registry(registry):
     except Exception as e:
         print("Registry save error:", e)
 
+def get_user_id():
+    """Foydalanuvchi ID sini aniq aniqlash (Telegram ID ustuvor)"""
+    # 1. URL parametri (eng ishonchli)
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        return 'tg_' + tg_user
+    # 2. Session dan
+    if session.get('tg_user'):
+        return 'tg_' + str(session['tg_user'])
+    # 3. Session ID (fallback)
+    if 'session_id' not in session:
+        session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
+    return session['session_id']
+
 def ensure_session_id():
-    """Har bir foydalanuvchi uchun unique ID (Telegram user ID yoki session)"""
-    # Avval URL dan Telegram user ID ni tekshirish
+    """Session ID ni kafolatlash"""
     tg_user = request.args.get('tg_user')
     if tg_user and tg_user.isdigit():
         session['session_id'] = 'tg_' + tg_user
+        session['tg_user'] = tg_user
         return session['session_id']
-    
-    # Session'dan olish
     if 'session_id' not in session:
         session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
     return session['session_id']
@@ -64,7 +76,7 @@ def get_user_db_path():
     
     # XAVFSIZLIK: Faqat egasi YOKI ruxsat berilganlar kira oladi
     entry = registry[db_name]
-    current_session = session.get('session_id')
+    current_session = get_user_id()
     allowed_sessions = entry.get('allowed_sessions', [])
     
     if entry.get('owner_session') == current_session:
@@ -183,6 +195,20 @@ if(window.Telegram&&Telegram.WebApp){
     }catch(e){}
   }
 })();
+// Har bir link'ga tg_user qo'shish
+(function(){
+  var uid = new URLSearchParams(location.search).get('tg_user');
+  if(!uid){ try{ uid = localStorage.getItem('ss_tg_user'); }catch(e){} }
+  if(uid){
+    document.querySelectorAll('a[href]').forEach(function(a){
+      var href = a.getAttribute('href');
+      if(href && href.startsWith('/') && !href.startsWith('//') && href.indexOf('tg_user=') === -1){
+        var sep = href.indexOf('?') !== -1 ? '&' : '?';
+        a.setAttribute('href', href + sep + 'tg_user=' + uid);
+      }
+    });
+  }
+})();
 </script>"""
 
 def RP(tpl, **ctx):
@@ -198,6 +224,11 @@ def index():
     if tg_user and tg_user.isdigit():
         session['session_id'] = 'tg_' + tg_user
         session['tg_user'] = tg_user
+    else:
+        # Session dan olish
+        saved = session.get('tg_user')
+        if saved:
+            session['session_id'] = 'tg_' + str(saved)
     ensure_session_id()
     return redirect("/dashboard")
 
@@ -207,7 +238,7 @@ def db_page():
     db_name = session.get('db_name')
     registry = load_registry()
     existing_dbs = list(registry.keys())
-    current_session = session.get('session_id')
+    current_session = get_user_id()
     
     # FAQAT egasiga tegishli bazalar (boshqalarniki KO'RINMAYDI)
     my_dbs = [{"name": name, "password": data.get("password", ""), "is_owner": True} 
@@ -301,7 +332,7 @@ def db_create():
     if db_name in registry:
         return db_error("Bu nom allaqachon mavjud! Boshqa nom tanlang yoki ulaning.")
     
-    current_session = session.get('session_id')
+    current_session = get_user_id()
     
     # JSON registry ga saqlash (parol OCHIQ!)
     registry[db_name] = {
@@ -343,7 +374,7 @@ def db_connect():
     
     entry = registry[db_name]
     saved_password = entry.get("password", "")
-    current_session = session.get('session_id')
+    current_session = get_user_id()
     
     # Agar egasi bo'lsa - avtomatik ulanadi
     if entry.get('owner_session') == current_session:
@@ -369,7 +400,7 @@ def db_connect():
 def db_switch(db_name):
     ensure_session_id()
     registry = load_registry()
-    current_session = session.get('session_id')
+    current_session = get_user_id()
     
     if db_name not in registry:
         return db_error("Baza topilmadi!")
@@ -384,6 +415,24 @@ def db_switch(db_name):
 
 @app.route("/db/disconnect")
 def db_disconnect():
+    # FAQAT joriy foydalanuvchining bazasini uzish
+    current_user = get_user_id()
+    db_name = session.get('db_name')
+    
+    # Agar custom baza bo'lsa - allowed_sessions dan olib tashlash
+    if db_name and db_name != 'default':
+        registry = load_registry()
+        if db_name in registry:
+            entry = registry[db_name]
+            # Egasi uzsa - hech narsa o'zgarmaydi (baza saqlanib qoladi)
+            # Boshqa ulangan uzsa - faqat o'zini olib tashlaydi
+            if entry.get('owner_session') != current_user:
+                if current_user in entry.get('allowed_sessions', []):
+                    entry['allowed_sessions'].remove(current_user)
+                    registry[db_name] = entry
+                    save_registry(registry)
+    
+    # FAQAT shu foydalanuvchining session'ini tozalash
     session.pop('db_name', None)
     session.pop('db_message', None)
     return redirect("/dashboard")
@@ -657,6 +706,7 @@ def reports_page():
 def start_bot_thread():
     if not BOT_TOKEN: print("⚠️ BOT_TOKEN yo'q"); return
     try:
+
         import asyncio
         from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
         from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
