@@ -40,45 +40,44 @@ def save_registry(registry):
         print("Registry save error:", e)
 
 def get_user_id():
-    """Har bir foydalanuvchi uchun GUARANTEED unique ID"""
-    # 1. Cookie dan olish
-    uid = request.cookies.get('ss_uid')
-    if uid and len(uid) == 32:
+    """Har bir Telegram user uchun UNIQUE ID (100% ishonchli)"""
+    # 1. URL dan Telegram ID (eng ishonchli)
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        uid = 'tg_' + tg_user
+        session['session_id'] = uid
+        session['tg_user'] = tg_user
+        return uid
+    
+    # 2. Session dan Telegram ID
+    if session.get('tg_user'):
+        uid = 'tg_' + str(session['tg_user'])
         session['session_id'] = uid
         return uid
     
-    # 2. Session dan olish
-    if 'session_id' in session and len(session['session_id']) == 32:
-        return session['session_id']
-    
-    # 3. Yangi yaratish
-    new_uid = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
-    session['session_id'] = new_uid
-    
-    # Cookie ga yozish (30 kun)
-    from flask import make_response
-    # Response da cookie qo'shiladi (after_request da)
-    session['set_cookie'] = new_uid
-    
-    return new_uid
+    # 3. Fallback - random (faqat brauzerda)
+    if 'session_id' not in session:
+        session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
+    return session['session_id']
 
 def ensure_session_id():
-    """Session ID ni kafolatlash (cookie ustuvor)"""
-    # Cookie dan olish
-    uid = request.cookies.get('ss_uid')
-    if uid and len(uid) == 32:
-        session['session_id'] = uid
-        return uid
-    
-    # Session dan
-    if 'session_id' in session and len(session['session_id']) == 32:
+    """Telegram ID ni kafolatlash"""
+    # URL dan
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        session['session_id'] = 'tg_' + tg_user
+        session['tg_user'] = tg_user
         return session['session_id']
     
-    # Yangi
-    new_uid = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
-    session['session_id'] = new_uid
-    session['set_cookie'] = new_uid
-    return new_uid
+    # Session dan
+    if session.get('tg_user'):
+        session['session_id'] = 'tg_' + str(session['tg_user'])
+        return session['session_id']
+    
+    # Fallback
+    if 'session_id' not in session:
+        session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
+    return session['session_id']
 
 def get_user_db_path():
     """Joriy foydalanuvchining database fayli (xavfsiz)"""
@@ -126,13 +125,7 @@ def close_db(exc):
     db = g.pop("db", None)
     if db: db.close()
 
-@app.after_request
-def set_uid_cookie(response):
-    """Har bir response da UID cookie ni o'rnatish"""
-    if session.get('set_cookie'):
-        uid = session.pop('set_cookie')
-        response.set_cookie('ss_uid', uid, max_age=30*24*3600, httponly=True, samesite='None', secure=True)
-    return response
+
 
 def db_error(msg):
     return render_template_string("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>" + CSS + "</style></head><body>" + NAV_HTML + "<div style='padding:24px;max-width:500px;margin:60px auto;'><div class='card' style='text-align:center;padding:40px;'><div style='font-size:56px;margin-bottom:16px;'>❌</div><h1 style='font-size:24px;margin-bottom:12px;color:var(--red);'>Xato</h1><p style='color:var(--dim);margin-bottom:24px;'>" + msg + "</p><a href='/db' class='btn btn-primary' style='padding:16px;'>← Orqaga</a></div></div></body></html>")
@@ -196,19 +189,41 @@ TG_SCRIPT = """<script src='https://telegram.org/js/telegram-web-app.js'></scrip
 if(window.Telegram&&Telegram.WebApp){
   Telegram.WebApp.ready();
   Telegram.WebApp.expand();
+  
+  // Telegram user ID ni olish
+  var tgUser = null;
+  try {
+    if(Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user){
+      tgUser = Telegram.WebApp.initDataUnsafe.user.id;
+    }
+  } catch(e){}
+  
+  // Agar Telegram ID bor bo'lsa - barcha link'larga qo'shish
+  if(tgUser){
+    // Hozirgi URL ga qo'shish
+    if(location.search.indexOf('tg_user=') === -1){
+      var sep = location.search ? '&' : '?';
+      var newUrl = location.pathname + location.search + sep + 'tg_user=' + tgUser;
+      history.replaceState(null, '', newUrl);
+    }
+    
+    // Barcha link'larga qo'shish
+    function addTgUserToLinks(){
+      document.querySelectorAll('a[href]').forEach(function(a){
+        var href = a.getAttribute('href');
+        if(href && href.startsWith('/') && !href.startsWith('//') && href.indexOf('tg_user=') === -1){
+          var sep = href.indexOf('?') !== -1 ? '&' : '?';
+          a.setAttribute('href', href + sep + 'tg_user=' + tgUser);
+        }
+      });
+    }
+    
+    // Sahifa yuklanganda va DOM o'zgarganda
+    addTgUserToLinks();
+    var observer = new MutationObserver(addTgUserToLinks);
+    observer.observe(document.body, {childList: true, subtree: true});
+  }
 }
-// LocalStorage dan UID olish yoki yaratish
-(function(){
-  var uid = localStorage.getItem('ss_uid');
-  if(!uid || uid.length !== 32){
-    uid = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');
-    localStorage.setItem('ss_uid', uid);
-  }
-  // Cookie ga yozish (agar yo'q bo'lsa)
-  if(document.cookie.indexOf('ss_uid=') === -1){
-    document.cookie = 'ss_uid=' + uid + '; path=/; max-age=2592000; SameSite=None; Secure';
-  }
-})();
 </script>"""
 
 def RP(tpl, **ctx):
@@ -220,6 +235,10 @@ def RP(tpl, **ctx):
 # ═══════════════════════════════════════
 @app.route("/")
 def index():
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        session['session_id'] = 'tg_' + tg_user
+        session['tg_user'] = tg_user
     ensure_session_id()
     return redirect("/dashboard")
 
@@ -732,7 +751,8 @@ def start_bot_thread():
 👋 <b>{}</b>, xush kelibsiz!
 
 👇 Ilovani oching:""".format(user.full_name)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=APP_URL))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
+            app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
             await update.message.reply_html(info, reply_markup=kb)
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query; await query.answer()
