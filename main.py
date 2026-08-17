@@ -574,7 +574,164 @@ def pos():
     function cq(i,d){C[i].qty=Math.max(1,C[i].qty+d);rc()}function cc(){C=[];rc()}
     async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\\nYangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}
     function bp(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.1;o.start();o.stop(c.currentTime+.1)}catch{}}
-    async function ss(){if(sc)return;const region=document.getElementById('sr');region.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--dim)">📷 Yuklanmoqda...</div>';sc=new Html5Qrcode("sr");let cams=[];try{cams=await Html5Qrcode.getCameras()}catch(e){}let camId=null;if(cams.length){camId=cams[0].id;for(const c of cams){if(/back|rear|environment/i.test(c.label||'')){camId=c.id;break}}}const onOk=function(txt){if(txt&&txt!==ls){ls=txt;ab(txt);if(navigator.vibrate)navigator.vibrate(80);setTimeout(function(){ls=''},700)}};const onErr=function(){};const hq={fps:60,qrbox:{width:260,height:140},videoConstraints:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60},advanced:[{focusMode:"continuous"}]}};let ok=false;if(camId){try{await sc.start(camId,hq,onOk,onErr);ok=true}catch(e){}}if(!ok){try{await sc.start({facingMode:{ideal:"environment"}},hq,onOk,onErr);ok=true}catch(e){}}if(!ok){try{await sc.start({facingMode:"environment"},{fps:30,qrbox:{width:250,height:140}},onOk,onErr);ok=true}catch(e){}}if(!ok){sc=null;region.innerHTML='<div style="padding:20px;text-align:center;color:var(--red)">❌ Kamera ruxsati kerak</div>';alert('Kamera ochilmadi');return}try{await sc.applyVideoConstraints({advanced:[{torch:true,focusMode:"continuous"}]})}catch(e){}document.getElementById('sb').style.display='flex'}
+    async function ss(){
+if(sc) return;
+const region = document.getElementById('sr');
+region.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--dim)">📷 Kamera yuklanmoqda...</div>';
+
+sc = new Html5Qrcode("sr");
+let cams = [];
+
+// 1. Barcha kameralarni olish
+try { 
+    cams = await Html5Qrcode.getCameras();
+    console.log('📷 Topilgan kameralar:', cams);
+} catch(e) {
+    console.log('⚠️ Kameralarni olish xatosi:', e);
+}
+
+// 2. Orqa kamerani tanlash
+let camId = null;
+if(cams.length > 0){
+    camId = cams[0].id;
+    for(const c of cams){
+        if(/back|rear|environment|orqa/i.test(c.label || '')){
+            camId = c.id;
+            console.log('✅ Orqa kamera topildi:', c.label);
+            break;
+        }
+    }
+}
+
+// 3. Callback funksiyalar
+const onOk = function(txt){
+    if(txt && txt !== ls){
+        ls = txt;
+        ab(txt);
+        if(navigator.vibrate) navigator.vibrate(80);
+        setTimeout(function(){ ls = ''; }, 700);
+    }
+};
+
+const onErr = function(err){
+    // Xatolarni log qilish (lekin foydalanuvchiga ko'rsatmaslik)
+};
+
+// 4. Professional sozlamalar (60 FPS, 1080p, torch, autofokus)
+const hq = {
+    fps: 60,
+    qrbox: { width: 260, height: 140 },
+    videoConstraints: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 60 },
+        advanced: [
+            { focusMode: "continuous" },
+            { torch: true }
+        ]
+    }
+};
+
+// 5. 4 bosqichli fallback mexanizmi
+let ok = false;
+
+// Bosqich 1: Aniq tanlangan orqa kamera + professional sozlamalar
+if(camId){
+    try {
+        console.log('🎯 Bosqich 1: Orqa kamera + HQ sozlamalar');
+        await sc.start(camId, hq, onOk, onErr);
+        ok = true;
+        console.log('✅ Bosqich 1 muvaffaqiyatli');
+    } catch(e) {
+        console.log('⚠️ Bosqich 1 xatosi:', e);
+    }
+}
+
+// Bosqich 2: Environment facing mode + professional sozlamalar
+if(!ok){
+    try {
+        console.log('🎯 Bosqich 2: Environment mode + HQ sozlamalar');
+        await sc.start({facingMode: {ideal: "environment"}}, hq, onOk, onErr);
+        ok = true;
+        console.log('✅ Bosqich 2 muvaffaqiyatli');
+    } catch(e) {
+        console.log('⚠️ Bosqich 2 xatosi:', e);
+    }
+}
+
+// Bosqich 3: Environment string + oddiy sozlamalar (30 FPS)
+if(!ok){
+    try {
+        console.log('🎯 Bosqich 3: Environment string + oddiy sozlamalar');
+        await sc.start(
+            {facingMode: "environment"}, 
+            {fps: 30, qrbox: {width: 250, height: 140}}, 
+            onOk, 
+            onErr
+        );
+        ok = true;
+        console.log('✅ Bosqich 3 muvaffaqiyatli');
+    } catch(e) {
+        console.log('⚠️ Bosqich 3 xatosi:', e);
+    }
+}
+
+// Bosqich 4: Birinchi kamera + oddiy sozlamalar
+if(!ok && cams.length > 0){
+    try {
+        console.log('🎯 Bosqich 4: Birinchi kamera + oddiy sozlamalar');
+        await sc.start(
+            cams[0].id, 
+            {fps: 30, qrbox: {width: 250, height: 140}}, 
+            onOk, 
+            onErr
+        );
+        ok = true;
+        console.log('✅ Bosqich 4 muvaffaqiyatli');
+    } catch(e) {
+        console.log('⚠️ Bosqich 4 xatosi:', e);
+    }
+}
+
+// 6. Agar hech narsa ishlamasa
+if(!ok){
+    sc = null;
+    region.innerHTML = '<div style="padding:20px;text-align:center;color:var(--red)">❌ Kamera ochilmadi<br><small>Ruxsat bering va qayta urinib ko'ring</small></div>';
+    alert('Kamera ochilmadi. Iltimos, brauzer sozlamalaridan kamera ruxsatini bering.');
+    return;
+}
+
+// 7. Torch va autofokusni qo'shimcha yoqish (agar avtomatik ishlamasa)
+try {
+    const track = sc.getVideoElement().srcObject.getTracks()[0];
+    if(track){
+        const capabilities = track.getCapabilities();
+        const constraints = {};
+        
+        // Torch yoqish
+        if(capabilities.torch){
+            constraints.torch = true;
+            console.log('💡 Torch yoqildi');
+        }
+        
+        // Continuous autofocus
+        if(capabilities.focusMode && capabilities.focusMode.includes('continuous')){
+            constraints.focusMode = 'continuous';
+            console.log('🔍 Autofokus yoqildi');
+        }
+        
+        if(Object.keys(constraints).length > 0){
+            await track.applyConstraints({advanced: [constraints]});
+        }
+    }
+} catch(e) {
+    console.log('⚠️ Qo'shimcha sozlamalar xatosi:', e);
+}
+
+console.log('🎉 Kamera muvaffaqiyatli ishga tushdi!');
+document.getElementById('sb').style.display = 'flex';
+}
     function xs(){if(sc){sc.stop().then(function(){sc.clear();sc=null});document.getElementById('sb').style.display='none'}}
     function ms(){const v=document.getElementById('mb').value.trim();if(v){ab(v);document.getElementById('mb').value=''}}
     document.getElementById('mb').addEventListener('keydown',function(e){if(e.key==='Enter')ms()});
