@@ -40,26 +40,13 @@ def save_registry(registry):
         print("Registry save error:", e)
 
 def get_user_id():
-    """Foydalanuvchi ID sini aniq aniqlash (Telegram ID ustuvor)"""
-    # 1. URL parametri (eng ishonchli)
-    tg_user = request.args.get('tg_user')
-    if tg_user and tg_user.isdigit():
-        return 'tg_' + tg_user
-    # 2. Session dan
-    if session.get('tg_user'):
-        return 'tg_' + str(session['tg_user'])
-    # 3. Session ID (fallback)
+    """Har bir brauzer/session uchun unique ID (Telegram ID YO'Q)"""
     if 'session_id' not in session:
         session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
     return session['session_id']
 
 def ensure_session_id():
-    """Session ID ni kafolatlash"""
-    tg_user = request.args.get('tg_user')
-    if tg_user and tg_user.isdigit():
-        session['session_id'] = 'tg_' + tg_user
-        session['tg_user'] = tg_user
-        return session['session_id']
+    """Har bir brauzer uchun unique session ID"""
     if 'session_id' not in session:
         session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:16]
     return session['session_id']
@@ -167,49 +154,7 @@ NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div cl
 
 MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
 
-TG_SCRIPT = """<script src='https://telegram.org/js/telegram-web-app.js'></script>
-<script>
-if(window.Telegram&&Telegram.WebApp){
-  Telegram.WebApp.ready();
-  Telegram.WebApp.expand();
-  var tgUser = Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user ? Telegram.WebApp.initDataUnsafe.user.id : null;
-  if(tgUser){
-    try{localStorage.setItem('ss_tg_user', tgUser);}catch(e){}
-    if(location.search.indexOf('tg_user=') === -1){
-      var sep = location.search ? '&' : '?';
-      location.replace(location.pathname + location.search + sep + 'tg_user=' + tgUser);
-    }
-  }
-}
-(function(){
-  var p = new URLSearchParams(location.search).get('tg_user');
-  if(p){
-    try{localStorage.setItem('ss_tg_user', p);}catch(e){}
-  } else {
-    try{
-      var s = localStorage.getItem('ss_tg_user');
-      if(s && location.pathname !== '/db'){
-        var sep = location.search ? '&' : '?';
-        location.replace(location.pathname + location.search + sep + 'tg_user=' + s);
-      }
-    }catch(e){}
-  }
-})();
-// Har bir link'ga tg_user qo'shish
-(function(){
-  var uid = new URLSearchParams(location.search).get('tg_user');
-  if(!uid){ try{ uid = localStorage.getItem('ss_tg_user'); }catch(e){} }
-  if(uid){
-    document.querySelectorAll('a[href]').forEach(function(a){
-      var href = a.getAttribute('href');
-      if(href && href.startsWith('/') && !href.startsWith('//') && href.indexOf('tg_user=') === -1){
-        var sep = href.indexOf('?') !== -1 ? '&' : '?';
-        a.setAttribute('href', href + sep + 'tg_user=' + uid);
-      }
-    });
-  }
-})();
-</script>"""
+TG_SCRIPT = "<script src='https://telegram.org/js/telegram-web-app.js'></script><script>if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();}</script>"
 
 def RP(tpl, **ctx):
     full = "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'><title>SmartStore</title>" + TG_SCRIPT + "<style>" + CSS + "</style></head><body>" + NAV_HTML + tpl + MOBILE_NAV + "</body></html>"
@@ -220,15 +165,6 @@ def RP(tpl, **ctx):
 # ═══════════════════════════════════════
 @app.route("/")
 def index():
-    tg_user = request.args.get('tg_user')
-    if tg_user and tg_user.isdigit():
-        session['session_id'] = 'tg_' + tg_user
-        session['tg_user'] = tg_user
-    else:
-        # Session dan olish
-        saved = session.get('tg_user')
-        if saved:
-            session['session_id'] = 'tg_' + str(saved)
     ensure_session_id()
     return redirect("/dashboard")
 
@@ -733,8 +669,7 @@ def start_bot_thread():
 👋 <b>{}</b>, xush kelibsiz!
 
 👇 Ilovani oching:""".format(user.full_name)
-            app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=APP_URL))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
             await update.message.reply_html(info, reply_markup=kb)
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query; await query.answer()
