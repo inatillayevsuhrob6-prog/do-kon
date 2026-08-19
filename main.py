@@ -150,9 +150,26 @@ def db_page():
             </div>
         </div>
     </div>
-    <div class="grid g2">
+    <div class="grid g2" style="margin-bottom:12px;">
         <a href="/dashboard" class="btn btn-primary" style="padding:18px;justify-content:center;">📊 Panelga o'tish</a>
         <a href="/db/disconnect" class="btn btn-red" style="padding:18px;justify-content:center;">🔌 Uzish</a>
+    </div>
+
+    <div class="grid g2">
+        <a href="/db/edit/{{db_name}}" class="btn btn-gray" style="padding:18px;justify-content:center;">
+            ✏️ Bazani tahrirlash
+        </a>
+
+        <form method="POST"
+              action="/db/delete/{{db_name}}"
+              style="margin:0;"
+              onsubmit="return confirm('⚠️ {{db_name}} bazasini o‘chirishni tasdiqlaysizmi? Baza ichidagi barcha mahsulotlar, sotuvlar va maʼlumotlar ham o‘chadi!');">
+            <button type="submit"
+                    class="btn btn-red"
+                    style="width:100%;padding:18px;justify-content:center;">
+                🗑 Bazani o‘chirish
+            </button>
+        </form>
     </div>
     {%else%}
     <div class="card" style="margin-bottom:16px;border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.05);">
