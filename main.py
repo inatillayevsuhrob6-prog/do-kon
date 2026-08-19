@@ -122,6 +122,10 @@ def RP(tpl, **ctx):
 # ═══════════════════════════════════════
 @app.route("/")
 def index():
+    tg_user = request.args.get('tg_user')
+    if tg_user and tg_user.isdigit():
+        session['session_id'] = 'tg_' + tg_user
+        session['tg_user'] = tg_user
     ensure_session_id()
     return redirect("/dashboard")
 
