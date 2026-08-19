@@ -186,31 +186,16 @@ def db_page():
                     <span style="font-weight:700;font-size:16px;">🗄️ {{db.name}}</span>
                     <span class="badge badge-green" style="margin-left:8px;">👑 Egasi</span>
                 </div>
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-    <a href="/db/switch/{{db.name}}" class="btn btn-primary btn-sm">O'tish</a>
-    <a href="/db/edit/{{db.name}}" class="btn btn-gray btn-sm">✏️</a>
-    <form method="POST" action="/db/delete/{{db.name}}"
-          style="display:inline;margin:0;"
-          onsubmit="return confirm('⚠️ Bu bazani o‘chirishni tasdiqlaysizmi? Baza ichidagi maʼlumotlar ham o‘chadi!');">
-        <button type="submit" class="btn btn-red btn-sm">🗑</button>
-    </form>
-</div>
-
-    <a href="/db/edit/{{db.name}}" class="btn btn-gray btn-sm">
-        ✏️
-    </a>
-
-    <form method="POST"
-          action="/db/delete/{{db.name}}"
-          style="display:inline;"
-          onsubmit="return confirm('⚠️ {{db.name}} bazasi va uning ichidagi barcha ma\'lumotlar butunlay o\'chiriladi. Davom etasizmi?')">
-
-        <button type="submit" class="btn btn-red btn-sm">
-            🗑
-        </button>
-    </form>
-</div>
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                    <a href="/db/switch/{{db.name}}" class="btn btn-primary btn-sm">O'tish</a>
+                    <a href="/db/edit/{{db.name}}" class="btn btn-gray btn-sm">✏️</a>
+                    <form method="POST"
+                          action="/db/delete/{{db.name}}"
+                          style="display:inline;margin:0;"
+                          onsubmit="return confirm('⚠️ Bu bazani o‘chirishni tasdiqlaysizmi? Baza ichidagi maʼlumotlar ham o‘chadi!');">
+                        <button type="submit" class="btn btn-red btn-sm">🗑</button>
+                    </form>
+                </div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(59,130,246,.1);border-radius:10px;">
                 <span style="font-size:12px;color:var(--dim);">🔑 Parol:</span>
