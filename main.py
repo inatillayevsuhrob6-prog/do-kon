@@ -204,6 +204,21 @@ MOBILE_NAV = """<div class='mnav'>
 <a href='/sales'>🧾<span>Sotuv</span></a>
 <a href='/debts'>💳<span>Qarzdor</span></a>
 <a href='/reports'>📈<span>Hisobot</span></a>
+<button onclick="document.getElementById('db-menu').classList.toggle('active')" style="background:none;border:none;color:var(--dim);font-size:24px;padding:6px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;">⋮<span style="font-size:10px;font-weight:700;">Menyu</span></button>
+</div>
+<div id='db-menu' class='modal-overlay' onclick="if(event.target===this)this.classList.remove('active')">
+<div class='modal' style='max-width:300px;'>
+<h3 style='margin-bottom:16px;text-align:center;'>🗄️ Database</h3>
+<a href='/db' class='btn btn-primary' style='width:100%;justify-content:center;margin-bottom:12px;'>Boshqarish</a>
+<button onclick="document.getElementById('db-menu').classList.remove('active')" class='btn btn-gray' style='width:100%;justify-content:center;'>Yopish</button>
+</div>
+</div>"""
+<a href='/dashboard'>📊<span>Panel</span></a>
+<a href='/pos'>🛒<span>Kassa</span></a>
+<a href='/products'>📦<span>Mahsulot</span></a>
+<a href='/sales'>🧾<span>Sotuv</span></a>
+<a href='/debts'>💳<span>Qarzdor</span></a>
+<a href='/reports'>📈<span>Hisobot</span></a>
 <button onclick="document.getElementById('db-menu').classList.toggle('active')" style="background:none;border:none;color:var(--dim);font-size:24px;padding:6px 12px;cursor:pointer;">⋮<span style="font-size:10px;font-weight:700;display:block;">Menyu</span></button>
 </div>
 <div id='db-menu' class='modal-overlay' onclick="if(event.target===this)this.classList.remove('active')">
