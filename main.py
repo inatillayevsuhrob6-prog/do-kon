@@ -779,7 +779,172 @@ def sales_list():
     <td style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(s.total)}}</td>
     <td>{%if s.payment=='cash'%}<span class="badge badge-green">NAQD</span>{%elif s.payment=='card'%}<span class="badge badge-blue">KARTA</span>{%elif s.payment=='credit'%}<span class="badge badge-red">NASIYA</span>{%else%}<span class="badge badge-yellow">ARALASH</span>{%endif%}</td>
     <td style="font-size:12px;">{{s.customer_name or '-'}}{%if s.customer_phone%}<br>{{s.customer_phone}}{%endif%}</td>
-    <td><a href="/sales/{{s.id}}/receipt" target="_blank" class="btn btn-gray btn-sm">📄</a></td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows)
+    <td>
+    <div style="display:flex;gap:6px;align-items:center;">
+        <a href="/sales/{{s.id}}/receipt"
+           target="_blank"
+           class="btn btn-gray btn-sm">📄</a>
+
+        <a href="/sales/{{s.id}}/edit"
+           class="btn btn-gray btn-sm">✏️</a>
+
+        <form method="POST"
+              action="/sales/{{s.id}}/delete"
+              style="display:inline;margin:0;"
+              onsubmit="return confirm('⚠️ #{{s.id}} sotuvini o‘chirishni tasdiqlaysizmi? Sotilgan mahsulotlar omborga qaytariladi.');">
+            <button type="submit"
+                    class="btn btn-red btn-sm">🗑</button>
+        </form>
+    </div>
+</td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows)
+
+
+@app.route("/sales/<int:sid>/edit", methods=["GET", "POST"])
+def sales_edit(sid):
+    ensure_session_id()
+    db = get_db()
+
+    sale = db.execute("SELECT * FROM sales WHERE id=?", (sid,)).fetchone()
+
+    if not sale:
+        return "Sotuv topilmadi", 404
+
+    if request.method == "POST":
+        customer_name = request.form.get("customer_name", "").strip()
+        customer_phone = request.form.get("customer_phone", "").strip()
+
+        db.execute(
+            "UPDATE sales SET customer_name=?, customer_phone=? WHERE id=?",
+            (customer_name, customer_phone, sid)
+        )
+
+        db.commit()
+        return redirect("/sales")
+
+    return RP("""
+<div style="padding:24px;max-width:600px;margin:0 auto;">
+    <div class="card">
+        <h1 style="font-size:22px;margin-bottom:8px;">
+            ✏️ Sotuvni tahrirlash
+        </h1>
+
+        <p style="color:var(--dim);font-size:13px;margin-bottom:20px;">
+            Chek #{{ sale.id }} — summa va mahsulotlar o'zgarmaydi.
+        </p>
+
+        <form method="POST">
+
+            <label style="font-size:13px;color:var(--dim);
+                          margin-bottom:6px;display:block;">
+                👤 Mijoz ismi
+            </label>
+
+            <input
+                class="input"
+                name="customer_name"
+                value="{{ sale.customer_name or '' }}"
+                placeholder="Ism Familiya"
+                style="margin-bottom:14px;"
+            >
+
+            <label style="font-size:13px;color:var(--dim);
+                          margin-bottom:6px;display:block;">
+                📱 Telefon
+            </label>
+
+            <input
+                class="input"
+                name="customer_phone"
+                value="{{ sale.customer_phone or '' }}"
+                placeholder="Telefon"
+            >
+
+            <div style="margin-top:16px;padding:14px;
+                        background:rgba(59,130,246,.08);
+                        border-radius:12px;">
+                <div style="font-size:12px;color:var(--dim);">
+                    Jami
+                </div>
+                <div style="font-size:22px;font-weight:800;
+                            color:var(--green);">
+                    {{ "{:,.0f}".format(sale.total) }} so'm
+                </div>
+            </div>
+
+            <button
+                class="btn btn-green"
+                style="width:100%;justify-content:center;
+                       margin-top:20px;padding:16px;">
+                💾 Saqlash
+            </button>
+
+            <a
+                href="/sales"
+                class="btn btn-gray"
+                style="width:100%;justify-content:center;
+                       margin-top:10px;padding:16px;">
+                ← Orqaga
+            </a>
+
+        </form>
+    </div>
+</div>
+""", sale=sale)
+
+
+@app.route("/sales/<int:sid>/delete", methods=["POST"])
+def sales_delete(sid):
+    ensure_session_id()
+    db = get_db()
+
+    sale = db.execute(
+        "SELECT * FROM sales WHERE id=?",
+        (sid,)
+    ).fetchone()
+
+    if not sale:
+        return "Sotuv topilmadi", 404
+
+    items = db.execute(
+        "SELECT product_id, qty FROM sale_items WHERE sale_id=?",
+        (sid,)
+    ).fetchall()
+
+    try:
+        # Sotilgan mahsulotlarni omborga qaytarish
+        for item in items:
+            db.execute(
+                "UPDATE products SET stock=stock+? WHERE id=?",
+                (item["qty"], item["product_id"])
+            )
+
+        # Agar nasiya bo'lsa, qolgan qarzni kamaytirish
+        if sale["payment"] == "credit" and sale["customer_phone"] and sale["debt"] > 0:
+            db.execute(
+                "UPDATE debts "
+                "SET total=MAX(0,total-?) "
+                "WHERE phone=?",
+                (sale["debt"], sale["customer_phone"])
+            )
+
+        # Sotuv elementlari va sotuvni o'chirish
+        db.execute(
+            "DELETE FROM sale_items WHERE sale_id=?",
+            (sid,)
+        )
+
+        db.execute(
+            "DELETE FROM sales WHERE id=?",
+            (sid,)
+        )
+
+        db.commit()
+
+        return redirect("/sales")
+
+    except Exception as e:
+        db.rollback()
+        return "Sotuvni o'chirishda xato: " + str(e), 500
 
 @app.route("/sales/<int:sid>/receipt")
 def receipt(sid):
