@@ -109,7 +109,7 @@ CSS = "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;
 
 NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/db' style='color:var(--primary);'>🗄️ Baza</a></div></div>"
 
-MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/reports'>📈<span>Hisobot</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
+MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/reports'>📈<span>Hisobot</span></a><button onclick=\"document.getElementById(&#39;db-popup&#39;).classList.add(&#39;active&#39;)\" style=\"background:none;border:none;color:var(--dim);font-size:24px;padding:6px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;\"><span>⋮</span><span style=\"font-size:10px;font-weight:700;\">Menyu</span></button></div><div id=\"db-popup\" class=\"modal-overlay\" onclick=\"if(event.target===this)this.classList.remove(&#39;active&#39;)\"><div class=\"modal\" style=\"max-width:320px;\"><h3 style=\"margin-bottom:16px;text-align:center;font-size:18px;\">🗄️ Database Menyusi</h3><a href=\"/db\" class=\"btn btn-primary\" style=\"width:100%;justify-content:center;margin-bottom:10px;padding:16px;\">🗄️ Bazani boshqarish</a><a href=\"/db/create\" class=\"btn btn-green\" style=\"width:100%;justify-content:center;margin-bottom:10px;padding:16px;\" onclick=\"event.preventDefault();window.location.href=&#39;/db&#39;\">➕ Yangi baza yaratish</a><button onclick=\"document.getElementById(&#39;db-popup&#39;).classList.remove(&#39;active&#39;)\" class=\"btn btn-gray\" style=\"width:100%;justify-content:center;padding:16px;\">✕ Yopish</button></div></div>"
 
 TG_SCRIPT = "<script src='https://telegram.org/js/telegram-web-app.js'></script><script>if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();}</script>"
 
@@ -592,7 +592,35 @@ def api_checkout():
         except:
             pass
         return jsonify({"error": str(e)}), 400
+cd ~/dukon
 
+python3 << 'FIXEOF'
+with open("main.py", "r", encoding="utf-8") as f:
+    code = f.read()
+
+# Eski MOBILE_NAV ni topish
+old_mnav = 'MOBILE_NAV = "<div class=\'mnav\'><a href=\'/dashboard\'>📊<span>Panel</span></a><a href=\'/pos\'>🛒<span>Kassa</span></a><a href=\'/products\'>📦<span>Mahsulot</span></a><a href=\'/sales\'>🧾<span>Sotuv</span></a><a href=\'/debts\'>💳<span>Qarzdor</span></a><a href=\'/reports\'>📈<span>Hisobot</span></a><a href=\'/db\'>🗄️<span>Baza</span></a></div>"'
+
+# Yangi MOBILE_NAV - oxirida ⋮ tugma + popup
+new_mnav = 'MOBILE_NAV = "<div class=\'mnav\'><a href=\'/dashboard\'>📊<span>Panel</span></a><a href=\'/pos\'>🛒<span>Kassa</span></a><a href=\'/products\'>📦<span>Mahsulot</span></a><a href=\'/sales\'>🧾<span>Sotuv</span></a><a href=\'/debts\'>💳<span>Qarzdor</span></a><a href=\'/reports\'>📈<span>Hisobot</span></a><button onclick=\\"document.getElementById(&#39;db-popup&#39;).classList.add(&#39;active&#39;)\\" style=\\"background:none;border:none;color:var(--dim);font-size:24px;padding:6px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;\\"><span>⋮</span><span style=\\"font-size:10px;font-weight:700;\\">Menyu</span></button></div><div id=\\"db-popup\\" class=\\"modal-overlay\\" onclick=\\"if(event.target===this)this.classList.remove(&#39;active&#39;)\\"><div class=\\"modal\\" style=\\"max-width:320px;\\"><h3 style=\\"margin-bottom:16px;text-align:center;font-size:18px;\\">🗄️ Database Menyusi</h3><a href=\\"/db\\" class=\\"btn btn-primary\\" style=\\"width:100%;justify-content:center;margin-bottom:10px;padding:16px;\\">🗄️ Bazani boshqarish</a><a href=\\"/db/create\\" class=\\"btn btn-green\\" style=\\"width:100%;justify-content:center;margin-bottom:10px;padding:16px;\\" onclick=\\"event.preventDefault();window.location.href=&#39;/db&#39;\\">➕ Yangi baza yaratish</a><button onclick=\\"document.getElementById(&#39;db-popup&#39;).classList.remove(&#39;active&#39;)\\" class=\\"btn btn-gray\\" style=\\"width:100%;justify-content:center;padding:16px;\\">✕ Yopish</button></div></div>"'
+
+if old_mnav in code:
+    code = code.replace(old_mnav, new_mnav, 1)
+    print("✅ MOBILE_NAV tuzatildi - ⋮ tugma qo'shildi")
+    
+    with open("main.py", "w", encoding="utf-8") as f:
+        f.write(code)
+    
+    print("\n🎯 Nima o'zgardi:")
+    print("   📱 MOBILE_NAV - telefonda pastki menyu")
+    print("   ⋮ Oxirida ⋮ (3 nuqta) tugma qo'shildi")
+    print("   🪟 Bosilganda popup oyna ochiladi")
+    print("   🗄️ Ichida 'Bazani boshqarish' tugmasi")
+    print("   🔒 Boshqa HECH NARSA o'zgarmadi")
+    print("   💾 Bazalar va mahsulotlar SAQLANIB QOLDI")
+else:
+    print("⚠️ Eski MOBILE_NAV topilmadi - boshqa ko'rinishda bo'lishi mumkin")
+FIXEOF
 @app.route("/sales")
 def sales_list():
     ensure_session_id()
