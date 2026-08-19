@@ -180,9 +180,9 @@ td{padding:14px 16px;border-top:1px solid var(--border);font-size:14px}tr:hover 
 .mnav a:active{background:rgba(59,130,246,.15);color:var(--primary)}.mnav span{font-size:10px;font-weight:700}}
 """
 
-NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/db' style='color:var(--primary);'>🗄️ Baza</a></div></div>"
+NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/reports'>📈 Hisobot</a><a href='/db' style='color:var(--primary);'>🗄️ Baza</a></div></div>"
 
-MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
+MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/reports'>📈<span>Hisobot</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
 
 TG_SCRIPT = """<script src='https://telegram.org/js/telegram-web-app.js'></script>
 <script>
