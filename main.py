@@ -852,127 +852,320 @@ def debt_pay(did):
     db.commit()
     return redirect("/debts")
 
+
 @app.route("/reports")
 def reports_page():
     ensure_session_id()
     db = get_db()
-    if not db:
-        return redirect("/dashboard")
-    
+
     period = request.args.get("period", "day")
     today = datetime.now().strftime("%Y-%m-%d")
-    
+
     if period == "week":
-        date_filter = "created_at>=date('now','-7 days')"
+        sales_where = "s.created_at >= date('now','-7 days')"
+        payment_where = "created_at >= date('now','-7 days')"
         period_label = "Haftalik"
     elif period == "month":
-        date_filter = "created_at>=date('now','-30 days')"
+        sales_where = "s.created_at >= date('now','-30 days')"
+        payment_where = "created_at >= date('now','-30 days')"
         period_label = "Oylik"
     else:
-        date_filter = "date(created_at)='{}'".format(today)
+        sales_where = "date(s.created_at) = ?"
+        payment_where = "date(created_at) = ?"
         period_label = "Bugungi"
-    
-    st = db.execute("SELECT COUNT(*) c, COALESCE(SUM(total),0) s FROM sales WHERE {}".format(date_filter)).fetchone()
-    total_sales = st["s"] if st else 0
-    total_count = st["c"] if st else 0
-    avg_check = total_sales / total_count if total_count > 0 else 0
-    
-    payments = db.execute("SELECT payment, COUNT(*) c, SUM(total) s FROM sales WHERE {} GROUP BY payment".format(date_filter)).fetchall()
-    
-    top_products = db.execute("SELECT p.name, SUM(si.qty) as qty, SUM(si.qty*si.price) as revenue FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales s ON s.id=si.sale_id WHERE {} GROUP BY si.product_id ORDER BY revenue DESC LIMIT 5".format(date_filter)).fetchall()
-    
-    debt_stats = db.execute("SELECT COUNT(*) c, COALESCE(SUM(total),0) t, COALESCE(SUM(paid),0) p FROM debts WHERE total>0").fetchone()
-    debt_count = debt_stats["c"] if debt_stats else 0
-    debt_total = debt_stats["t"] if debt_stats else 0
-    debt_paid = debt_stats["p"] if debt_stats else 0
-    debt_remaining = debt_total - debt_paid
-    
-    return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+
+    # Asosiy savdo statistikasi
+    if period == "day":
+        st = db.execute(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(total),0) AS s "
+            "FROM sales WHERE date(created_at)=?",
+            (today,)
+        ).fetchone()
+
+        payments = db.execute(
+            "SELECT payment, COUNT(*) AS c, COALESCE(SUM(total),0) AS s "
+            "FROM sales WHERE date(created_at)=? "
+            "GROUP BY payment ORDER BY s DESC",
+            (today,)
+        ).fetchall()
+
+        top_products = db.execute(
+            "SELECT p.name AS name, "
+            "SUM(si.qty) AS qty, "
+            "SUM(si.qty * si.price) AS revenue "
+            "FROM sale_items si "
+            "JOIN products p ON p.id = si.product_id "
+            "JOIN sales s ON s.id = si.sale_id "
+            "WHERE date(s.created_at)=? "
+            "GROUP BY si.product_id "
+            "ORDER BY revenue DESC "
+            "LIMIT 5",
+            (today,)
+        ).fetchall()
+
+    elif period == "week":
+        st = db.execute(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(total),0) AS s "
+            "FROM sales WHERE created_at >= date('now','-7 days')"
+        ).fetchone()
+
+        payments = db.execute(
+            "SELECT payment, COUNT(*) AS c, COALESCE(SUM(total),0) AS s "
+            "FROM sales WHERE created_at >= date('now','-7 days') "
+            "GROUP BY payment ORDER BY s DESC"
+        ).fetchall()
+
+        top_products = db.execute(
+            "SELECT p.name AS name, "
+            "SUM(si.qty) AS qty, "
+            "SUM(si.qty * si.price) AS revenue "
+            "FROM sale_items si "
+            "JOIN products p ON p.id = si.product_id "
+            "JOIN sales s ON s.id = si.sale_id "
+            "WHERE s.created_at >= date('now','-7 days') "
+            "GROUP BY si.product_id "
+            "ORDER BY revenue DESC "
+            "LIMIT 5"
+        ).fetchall()
+
+    else:
+        st = db.execute(
+            "SELECT COUNT(*) AS c, COALESCE(SUM(total),0) AS s "
+            "FROM sales WHERE created_at >= date('now','-30 days')"
+        ).fetchone()
+
+        payments = db.execute(
+            "SELECT payment, COUNT(*) AS c, COALESCE(SUM(total),0) AS s "
+            "FROM sales WHERE created_at >= date('now','-30 days') "
+            "GROUP BY payment ORDER BY s DESC"
+        ).fetchall()
+
+        top_products = db.execute(
+            "SELECT p.name AS name, "
+            "SUM(si.qty) AS qty, "
+            "SUM(si.qty * si.price) AS revenue "
+            "FROM sale_items si "
+            "JOIN products p ON p.id = si.product_id "
+            "JOIN sales s ON s.id = si.sale_id "
+            "WHERE s.created_at >= date('now','-30 days') "
+            "GROUP BY si.product_id "
+            "ORDER BY revenue DESC "
+            "LIMIT 5"
+        ).fetchall()
+
+    total_sales = float(st["s"] or 0)
+    total_count = int(st["c"] or 0)
+    avg_check = total_sales / total_count if total_count else 0
+
+    # Qarzdorlar
+    debt_stats = db.execute(
+        "SELECT COUNT(*) AS c, "
+        "COALESCE(SUM(total),0) AS t, "
+        "COALESCE(SUM(paid),0) AS p "
+        "FROM debts WHERE total > 0"
+    ).fetchone()
+
+    debt_count = int(debt_stats["c"] or 0)
+    debt_total = float(debt_stats["t"] or 0)
+    debt_paid = float(debt_stats["p"] or 0)
+
+    # Sizdagi debts.total allaqachon qolgan qarz bo'lgani uchun
+    # remaining shu qiymatning o'zi.
+    debt_remaining = debt_total
+
+    return RP("""
+<div style="padding:24px;max-width:1200px;margin:0 auto;">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                margin-bottom:24px;flex-wrap:wrap;gap:12px;">
         <h1 style="font-size:28px;font-weight:800;">📈 Hisobotlar</h1>
-        <button onclick="window.print()" class="btn btn-primary">🖨️ Chop etish</button>
+        <button onclick="window.print()" class="btn btn-primary">
+            🖨️ Chop etish
+        </button>
     </div>
+
     <div class="grid g3" style="margin-bottom:24px;">
-        <a href="?period=day" class="btn {%if period=='day'%}btn-primary{%else%}btn-gray{%endif%}" style="justify-content:center;padding:16px;">📅 Bugun</a>
-        <a href="?period=week" class="btn {%if period=='week'%}btn-primary{%else%}btn-gray{%endif%}" style="justify-content:center;padding:16px;">📆 Hafta</a>
-        <a href="?period=month" class="btn {%if period=='month'%}btn-primary{%else%}btn-gray{%endif%}" style="justify-content:center;padding:16px;">🗓️ Oy</a>
+        <a href="/reports?period=day"
+           class="btn {% if period=='day' %}btn-primary{% else %}btn-gray{% endif %}"
+           style="justify-content:center;padding:16px;">
+            📅 Bugun
+        </a>
+
+        <a href="/reports?period=week"
+           class="btn {% if period=='week' %}btn-primary{% else %}btn-gray{% endif %}"
+           style="justify-content:center;padding:16px;">
+            📆 Hafta
+        </a>
+
+        <a href="/reports?period=month"
+           class="btn {% if period=='month' %}btn-primary{% else %}btn-gray{% endif %}"
+           style="justify-content:center;padding:16px;">
+            🗓️ Oy
+        </a>
     </div>
-    <div style="text-align:center;margin-bottom:24px;padding:12px;background:rgba(59,130,246,.1);border-radius:12px;">
-        <span style="color:var(--primary);font-weight:700;font-size:16px;">{{period_label}} hisobot</span>
+
+    <div style="text-align:center;margin-bottom:24px;padding:12px;
+                background:rgba(59,130,246,.1);border-radius:12px;">
+        <span style="color:var(--primary);font-weight:700;font-size:16px;">
+            {{ period_label }} hisobot
+        </span>
     </div>
+
     <div class="grid g4" style="margin-bottom:24px;">
+
         <div class="stat-card">
             <div class="stat-label">💰 Jami savdo</div>
-            <div class="stat-value" style="color:var(--green);">{{"{:,.0f}".format(total_sales)}} so'm</div>
+            <div class="stat-value" style="color:var(--green);">
+                {{ "{:,.0f}".format(total_sales) }} so'm
+            </div>
         </div>
+
         <div class="stat-card green">
             <div class="stat-label">🧾 Cheklar soni</div>
-            <div class="stat-value">{{total_count}}</div>
+            <div class="stat-value">{{ total_count }}</div>
         </div>
+
         <div class="stat-card yellow">
             <div class="stat-label">📊 O'rtacha chek</div>
-            <div class="stat-value">{{"{:,.0f}".format(avg_check)}} so'm</div>
+            <div class="stat-value">
+                {{ "{:,.0f}".format(avg_check) }} so'm
+            </div>
         </div>
+
         <div class="stat-card red">
             <div class="stat-label">💸 Qarzdorlar</div>
-            <div class="stat-value">{{debt_count}}</div>
+            <div class="stat-value">{{ debt_count }}</div>
         </div>
+
     </div>
+
     <div class="grid g2">
+
         <div class="card">
-            <h2 style="margin-bottom:16px;font-size:18px;">💳 To'lov turlari</h2>
-            {%for p in payments%}
-            <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+            <h2 style="margin-bottom:16px;font-size:18px;">
+                💳 To'lov turlari
+            </h2>
+
+            {% for p in payments %}
+            <div style="display:flex;justify-content:space-between;
+                        padding:12px 0;border-bottom:1px solid var(--border);">
+
                 <div>
-                    {%if p.payment=='cash'%}<span class="badge badge-green">NAQD</span>
-                    {%elif p.payment=='card'%}<span class="badge badge-blue">KARTA</span>
-                    {%elif p.payment=='credit'%}<span class="badge badge-red">NASIYA</span>
-                    {%else%}<span class="badge badge-yellow">ARALASH</span>{%endif%}
+                    {% if p["payment"] == "cash" %}
+                        <span class="badge badge-green">NAQD</span>
+                    {% elif p["payment"] == "card" %}
+                        <span class="badge badge-blue">KARTA</span>
+                    {% elif p["payment"] == "credit" %}
+                        <span class="badge badge-red">NASIYA</span>
+                    {% else %}
+                        <span class="badge badge-yellow">ARALASH</span>
+                    {% endif %}
                 </div>
+
                 <div style="text-align:right;">
-                    <div style="font-weight:700;color:var(--green);">{{"{:,.0f}".format(p.s)}} so'm</div>
-                    <div style="font-size:12px;color:var(--dim);">{{p.c}} ta chek</div>
+                    <div style="font-weight:700;color:var(--green);">
+                        {{ "{:,.0f}".format(p["s"]) }} so'm
+                    </div>
+                    <div style="font-size:12px;color:var(--dim);">
+                        {{ p["c"] }} ta chek
+                    </div>
                 </div>
+
             </div>
-            {%else%}
-            <p style="color:var(--dim);text-align:center;padding:20px;">Bu davrda savdo yo'q</p>
-            {%endfor%}
+
+            {% else %}
+            <p style="color:var(--dim);text-align:center;padding:20px;">
+                Bu davrda savdo yo'q
+            </p>
+            {% endfor %}
         </div>
+
         <div class="card">
-            <h2 style="margin-bottom:16px;font-size:18px;">🏆 Top 5 mahsulot</h2>
-            {%for p in top_products%}
-            <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+            <h2 style="margin-bottom:16px;font-size:18px;">
+                🏆 Top 5 mahsulot
+            </h2>
+
+            {% for p in top_products %}
+            <div style="display:flex;justify-content:space-between;
+                        padding:12px 0;border-bottom:1px solid var(--border);">
+
                 <div>
-                    <div style="font-weight:600;">{{p.name}}</div>
-                    <div style="font-size:12px;color:var(--dim);">{{p.qty}} dona sotilgan</div>
+                    <div style="font-weight:600;">
+                        {{ p["name"] }}
+                    </div>
+                    <div style="font-size:12px;color:var(--dim);">
+                        {{ p["qty"] }} dona sotilgan
+                    </div>
                 </div>
-                <div style="font-weight:700;color:var(--green);">{{"{:,.0f}".format(p.revenue)}} so'm</div>
+
+                <div style="font-weight:700;color:var(--green);">
+                    {{ "{:,.0f}".format(p["revenue"]) }} so'm
+                </div>
+
             </div>
-            {%else%}
-            <p style="color:var(--dim);text-align:center;padding:20px;">Bu davrda savdo yo'q</p>
-            {%endfor%}
+
+            {% else %}
+            <p style="color:var(--dim);text-align:center;padding:20px;">
+                Bu davrda savdo yo'q
+            </p>
+            {% endfor %}
         </div>
+
     </div>
-    {%if debt_count > 0%}
-    <div class="card" style="margin-top:24px;border-color:rgba(245,158,11,.3);">
-        <h2 style="margin-bottom:16px;font-size:18px;">💸 Qarz holati</h2>
+
+    {% if debt_count > 0 %}
+    <div class="card"
+         style="margin-top:24px;border-color:rgba(245,158,11,.3);">
+
+        <h2 style="margin-bottom:16px;font-size:18px;">
+            💸 Qarz holati
+        </h2>
+
         <div class="grid g3">
-            <div style="background:rgba(59,130,246,.1);border-radius:12px;padding:16px;text-align:center;">
-                <div class="stat-label">Jami berilgan</div>
-                <div style="font-size:22px;font-weight:800;color:var(--primary);">{{"{:,.0f}".format(debt_total)}} so'm</div>
+
+            <div style="background:rgba(59,130,246,.1);
+                        border-radius:12px;padding:16px;text-align:center;">
+                <div class="stat-label">Qolgan jami qarz</div>
+                <div style="font-size:22px;font-weight:800;color:var(--red);">
+                    {{ "{:,.0f}".format(debt_remaining) }} so'm
+                </div>
             </div>
-            <div style="background:rgba(16,185,129,.1);border-radius:12px;padding:16px;text-align:center;">
+
+            <div style="background:rgba(16,185,129,.1);
+                        border-radius:12px;padding:16px;text-align:center;">
                 <div class="stat-label">To'langan</div>
-                <div style="font-size:22px;font-weight:800;color:var(--green);">{{"{:,.0f}".format(debt_paid)}} so'm</div>
+                <div style="font-size:22px;font-weight:800;color:var(--green);">
+                    {{ "{:,.0f}".format(debt_paid) }} so'm
+                </div>
             </div>
-            <div style="background:rgba(239,68,68,.1);border-radius:12px;padding:16px;text-align:center;">
-                <div class="stat-label">Qolgan qarz</div>
-                <div style="font-size:22px;font-weight:800;color:var(--red);">{{"{:,.0f}".format(debt_remaining)}} so'm</div>
+
+            <div style="background:rgba(239,68,68,.1);
+                        border-radius:12px;padding:16px;text-align:center;">
+                <div class="stat-label">Qarzdorlar soni</div>
+                <div style="font-size:22px;font-weight:800;color:var(--red);">
+                    {{ debt_count }}
+                </div>
             </div>
+
         </div>
     </div>
-    {%endif%}
-    </div>""", period=period, period_label=period_label, today=today, total_sales=total_sales, total_count=total_count, avg_check=avg_check, payments=payments, top_products=top_products, debt_count=debt_count, debt_total=debt_total, debt_paid=debt_paid, debt_remaining=debt_remaining)
+    {% endif %}
+
+</div>
+""",
+        period=period,
+        period_label=period_label,
+        today=today,
+        total_sales=total_sales,
+        total_count=total_count,
+        avg_check=avg_check,
+        payments=payments,
+        top_products=top_products,
+        debt_count=debt_count,
+        debt_total=debt_total,
+        debt_paid=debt_paid,
+        debt_remaining=debt_remaining
+    )
 
 # ═══════════════════════════════════════
 # 🤖 TELEGRAM BOT
