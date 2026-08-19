@@ -592,7 +592,6 @@ def api_checkout():
         except:
             pass
         return jsonify({"error": str(e)}), 400
-cd ~/dukon
 
 python3 << 'FIXEOF'
 with open("main.py", "r", encoding="utf-8") as f:
