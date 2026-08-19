@@ -138,7 +138,7 @@ CSS = """@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;50
 *{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
 .nav{background:rgba(17,24,39,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 24px;height:64px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
 .nav-brand{font-size:22px;font-weight:800;background:linear-gradient(135deg,#3b82f6,#10b981);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.nav-links{display:flex;gap:6px}.nav-links a{color:var(--dim);text-decoration:none;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;transition:.2s}
+.nav-links{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.nav-links a{color:var(--dim);text-decoration:none;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;transition:.2s}
 .nav-links a:hover{color:var(--text);background:rgba(255,255,255,.05)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;transition:.3s}
 .btn{padding:14px 24px;border-radius:12px;border:none;font-weight:700;font-size:15px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:#fff}
@@ -180,7 +180,7 @@ td{padding:14px 16px;border-top:1px solid var(--border);font-size:14px}tr:hover 
 .mnav a:active{background:rgba(59,130,246,.15);color:var(--primary)}.mnav span{font-size:10px;font-weight:700}}
 """
 
-NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/reports'>📈 Hisobot</a><a href='/db' style='color:var(--primary);'>🗄️ Baza</a></div></div>"
+NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/reports'>📈 Hisobot</a><a href='/reports'>📈 Hisobot</a><a href='/db' style='color:var(--primary);'>🗄️ Baza</a></div></div>"
 
 MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/reports'>📈<span>Hisobot</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
 
