@@ -986,7 +986,26 @@ def start_bot_thread():
             user = update.effective_user
             app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
             kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))], [InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
-            await update.message.reply_html("👋 <b>{}</b>\n\n🏪 SmartStore POS\n\n👇 Ilovani oching:".format(user.full_name), reply_markup=kb)
+            info = """🏪 <b>SmartStore POS</b> - Professional do'kon boshqaruvi
+
+✨ <b>Imkoniyatlar:</b>
+
+📦 <b>Mahsulotlar</b> — Shtrix-kod bilan qo'shish, qoldiqni kuzatish
+
+🛒 <b>Kassa</b> — Professional kamera (60 FPS), tezkor skaner
+
+🧾 <b>Sotuvlar</b> — Cheklar tarixi, PDF formatda
+
+💳 <b>Qarzdorlar</b> — Ism, telefon, to'lov qabul qilish
+
+🗄️ <b>Database</b> — Har kim o'z bazasini yaratadi, parol bilan himoyalangan
+
+━━━━━━━━━━━━━━━━━━━━
+
+👋 <b>{}</b>, xush kelibsiz!
+
+👇 Ilovani oching:""".format(user.full_name)
+            await update.message.reply_html(info, reply_markup=kb)
         
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
             query = update.callback_query
