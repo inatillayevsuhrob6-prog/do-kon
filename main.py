@@ -1175,8 +1175,182 @@ def debts_page():
     <div class="stat-card"><div class="stat-label">👥 Qarzdorlar</div><div class="stat-value">{{rows|length}}</div></div></div>
     <div class="table-wrap"><table><thead><tr><th>Ism Familiya</th><th>Telefon</th><th>Qarz</th><th>To'lov</th></tr></thead><tbody>
     {%for d in rows%}<tr><td><strong>{{d.full_name}}</strong></td><td style="font-family:monospace;">{{d.phone}}</td><td style="color:var(--red);font-weight:700;font-size:16px;">{{"{:,.0f}".format(d.total)}}</td>
-    <td><form method="POST" action="/debts/{{d.id}}/pay" style="display:flex;gap:6px;"><input type="number" name="amount" placeholder="Summa" required style="width:120px;padding:8px;background:var(--bg);color:#fff;border:1px solid var(--border);border-radius:8px;"><button class="btn btn-green btn-sm">💰</button></form></td></tr>
+    <td><form method="POST" action="/debts/{{d.id}}/pay" style="display:flex;gap:6px;"><input type="number" name="amount" placeholder="Summa" required style="width:120px;padding:8px;background:var(--bg);color:#fff;border:1px solid var(--border);border-radius:8px;"><button class="btn btn-green btn-sm">💰</button>
+    <a href="/debts/{{d.id}}/edit"
+       class="btn btn-gray btn-sm"
+       title="Tahrirlash">✏️</a>
+</form></td></tr>
     {%else%}<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:50px;">✅ Qarzdor yo'q</td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows, td=td, tp=tp)
+
+
+@app.route("/debts/<int:did>/edit", methods=["GET", "POST"])
+def debt_edit(did):
+    ensure_session_id()
+    db = get_db()
+
+    debt = db.execute(
+        "SELECT * FROM debts WHERE id=?",
+        (did,)
+    ).fetchone()
+
+    if not debt:
+        return "Qarzdor topilmadi", 404
+
+    if request.method == "POST":
+
+        full_name = request.form.get("full_name", "").strip()
+        phone = request.form.get("phone", "").strip()
+        category = request.form.get("category", "Shaxsiy").strip()
+        note = request.form.get("note", "").strip()
+        due_date = request.form.get("due_date", "").strip()
+
+        if not full_name:
+            return "Ism familiya majburiy", 400
+
+        db.execute(
+            "UPDATE debts SET full_name=?, phone=? WHERE id=?",
+            (full_name, phone, did)
+        )
+
+        # Agar jadvalda qo'shimcha ustunlar mavjud bo'lsa,
+        # ularni ham saqlashga urinib ko'ramiz.
+        try:
+            db.execute(
+                "UPDATE debts SET category=?, note=?, due_date=? WHERE id=?",
+                (category, note, due_date, did)
+            )
+        except Exception:
+            pass
+
+        db.commit()
+
+        return redirect("/debts")
+
+    return RP("""
+<div style="padding:24px;max-width:600px;margin:0 auto;">
+    <div class="card">
+
+        <h1 style="font-size:22px;font-weight:800;margin-bottom:8px;">
+            ✏️ Qarzdorni tahrirlash
+        </h1>
+
+        <p style="color:var(--dim);font-size:13px;margin-bottom:22px;">
+            Qarz summasi va to'lovlar o'zgarmaydi.
+        </p>
+
+        <form method="POST">
+
+            <label style="font-size:13px;color:var(--dim);
+                          display:block;margin-bottom:6px;">
+                👤 Ism familiya
+            </label>
+
+            <input
+                class="input"
+                name="full_name"
+                value="{{ debt.full_name }}"
+                required
+                style="margin-bottom:14px;"
+            >
+
+            <label style="font-size:13px;color:var(--dim);
+                          display:block;margin-bottom:6px;">
+                📱 Telefon
+            </label>
+
+            <input
+                class="input"
+                name="phone"
+                value="{{ debt.phone }}"
+                placeholder="+998901234567"
+                style="margin-bottom:14px;"
+            >
+
+            <label style="font-size:13px;color:var(--dim);
+                          display:block;margin-bottom:6px;">
+                📁 Kategoriya
+            </label>
+
+            <select class="input" name="category" style="margin-bottom:14px;">
+                <option value="Shaxsiy"
+                    {% if debt.category == 'Shaxsiy' %}selected{% endif %}>
+                    Shaxsiy
+                </option>
+
+                <option value="Biznes"
+                    {% if debt.category == 'Biznes' %}selected{% endif %}>
+                    Biznes
+                </option>
+
+                <option value="Oila"
+                    {% if debt.category == 'Oila' %}selected{% endif %}>
+                    Oila
+                </option>
+
+                <option value="Do'st"
+                    {% if debt.category == "Do'st" %}selected{% endif %}>
+                    Do'st
+                </option>
+            </select>
+
+            <label style="font-size:13px;color:var(--dim);
+                          display:block;margin-bottom:6px;">
+                📝 Izoh
+            </label>
+
+            <input
+                class="input"
+                name="note"
+                value=""
+                placeholder="Izoh"
+                style="margin-bottom:14px;"
+            >
+
+            <label style="font-size:13px;color:var(--dim);
+                          display:block;margin-bottom:6px;">
+                📅 Muddat
+            </label>
+
+            <input
+                class="input"
+                type="date"
+                name="due_date"
+                value=""
+                style="margin-bottom:18px;"
+            >
+
+            <div style="padding:14px;background:rgba(59,130,246,.08);
+                        border-radius:12px;margin-bottom:18px;">
+                <div style="font-size:12px;color:var(--dim);">
+                    Hozirgi qarz
+                </div>
+
+                <div style="font-size:24px;font-weight:800;
+                            color:var(--red);margin-top:4px;">
+                    {{ "{:,.0f}".format(debt.total) }} so'm
+                </div>
+            </div>
+
+            <button
+                class="btn btn-green"
+                style="width:100%;justify-content:center;
+                       padding:17px;">
+                💾 Saqlash
+            </button>
+
+            <a
+                href="/debts"
+                class="btn btn-gray"
+                style="width:100%;justify-content:center;
+                       padding:17px;margin-top:10px;">
+                ← Orqaga
+            </a>
+
+        </form>
+    </div>
+</div>
+""", debt=debt)
+
 
 @app.route("/debts/<int:did>/pay", methods=["POST"])
 def debt_pay(did):
