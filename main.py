@@ -611,6 +611,8 @@ def sales_list():
 def receipt(sid):
     ft = request.args.get("format", "html")
     
+    # Barcha bazalardan sale ni qidirish
+    import glob
     s = None
     items = []
     db = None
@@ -625,12 +627,14 @@ def receipt(sid):
                 db = temp_db
                 break
             temp_db.close()
-        except:
+        except Exception as e:
+            print(f"DB search error: {e}")
             continue
     
     if not s:
         return render_template_string("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:sans-serif;background:#f5f5f5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.box{background:#fff;padding:40px;border-radius:20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.1)}.icon{font-size:64px;margin-bottom:20px}h1{color:#ef4444;margin-bottom:10px}p{color:#666}</style></head><body><div class='box'><div class='icon'>❌</div><h1>Chek topilmadi</h1><p>Bu chek mavjud emas yoki o'chirilgan</p><a href='/dashboard' style='display:inline-block;margin-top:20px;padding:12px 24px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:10px;'>← Panelga qaytish</a></div></body></html>")
     
+    # PDF format
     if ft == "pdf":
         try:
             from reportlab.lib.pagesizes import A6
@@ -642,14 +646,14 @@ def receipt(sid):
             c.setFont("Helvetica-Bold", 16)
             c.drawCentredString(w/2, h-20*mm, "SMARTSTORE")
             c.setFont("Helvetica", 10)
-            c.drawCentredString(w/2, h-28*mm, "Chek #{} - {}".format(sid, str(s['created_at'])[:19]))
+            c.drawCentredString(w/2, h-28*mm, f"Chek #{sid} - {str(s['created_at'])[:19]}")
             c.line(10*mm, h-32*mm, w-10*mm, h-32*mm)
             y = h - 40*mm
             c.setFont("Helvetica-Bold", 11)
             for it in items:
                 name = it["name"][:20]
-                qty_price = "{} x {}".format(it['qty'], int(it['price']))
-                total = "{}".format(int(it['qty'] * it['price']))
+                qty_price = f"{it['qty']} x {int(it['price'])}"
+                total = f"{int(it['qty'] * it['price'])}"
                 c.drawString(10*mm, y, name)
                 c.drawCentredString(w/2, y, qty_price)
                 c.drawRightString(w-10*mm, y, total)
@@ -657,30 +661,32 @@ def receipt(sid):
             c.line(10*mm, y-2*mm, w-10*mm, y-2*mm)
             y -= 10*mm
             c.setFont("Helvetica-Bold", 14)
-            c.drawRightString(w-10*mm, y, "JAMI: {} so'm".format(int(s['total'])))
+            c.drawRightString(w-10*mm, y, f"JAMI: {int(s['total'])} so'm")
             y -= 8*mm
             c.setFont("Helvetica", 10)
-            c.drawString(10*mm, y, "To'lov: {}".format(s['payment'].upper()))
+            c.drawString(10*mm, y, f"To'lov: {s['payment'].upper()}")
             if s["customer_name"]:
                 y -= 5*mm
-                c.drawString(10*mm, y, "Mijoz: {}".format(s["customer_name"]))
+                c.drawString(10*mm, y, f"Mijoz: {s['customer_name']}")
             if s["customer_phone"]:
                 y -= 5*mm
-                c.drawString(10*mm, y, "Tel: {}".format(s["customer_phone"]))
+                c.drawString(10*mm, y, f"Tel: {s['customer_phone']}")
             if s["debt"] > 0:
                 y -= 5*mm
                 c.setFillColorRGB(0.8, 0, 0)
-                c.drawString(10*mm, y, "QARZ: {} so'm".format(int(s['debt'])))
+                c.drawString(10*mm, y, f"QARZ: {int(s['debt'])} so'm")
             c.save()
             buf.seek(0)
             if db:
                 db.close()
-            return send_file(buf, download_name="chek-{}.pdf".format(sid), mimetype="application/pdf")
-        except:
+            return send_file(buf, download_name=f"chek-{sid}.pdf", mimetype="application/pdf")
+        except Exception as e:
+            print(f"PDF error: {e}")
             if db:
                 db.close()
             return "PDF xatosi", 500
     
+    # HTML format - Professional dizayn
     html_template = """<!DOCTYPE html>
 <html lang="uz">
 <head>
@@ -815,6 +821,7 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#667eea 0%
     if db:
         db.close()
     return result
+
 
 @app.route("/debts")
 def debts_page():
