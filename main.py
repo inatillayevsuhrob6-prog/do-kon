@@ -1,13 +1,11 @@
-import os, sqlite3, threading, io, time, re, hashlib, json
+import os, sqlite3, threading, io, time, re, hashlib, json, glob
 from datetime import datetime
 from flask import Flask, request, redirect, render_template_string, send_file, jsonify, g, session
 
 BOT_TOKEN = "8863204152:AAF-VbLwrDrnSl832BZchmMA6HhJmbfQgjs"
 APP_URL = "https://smartstore-web-dvse.onrender.com"
 
-# ═══════════════════════════════════════
-# 📁 MA'LUMOTLAR PAPKASI
-# ═══════════════════════════════════════
+# Ma'lumotlar papkasi
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_REGISTRY_PATH = os.path.join(DATA_DIR, "db_registry.json")
@@ -22,17 +20,15 @@ app.config['SESSION_COOKIE_SECURE'] = True
 # 🗄️ DATABASE REGISTRY (JSON)
 # ═══════════════════════════════════════
 def load_registry():
-    """Barcha database'larni yuklash"""
     try:
         if os.path.exists(DB_REGISTRY_PATH):
             with open(DB_REGISTRY_PATH, 'r', encoding='utf-8') as f:
                 return json.load(f)
-    except Exception as e:
-        print("Registry load error:", e)
+    except:
+        pass
     return {}
 
 def save_registry(registry):
-    """Database'larni JSON ga saqlash"""
     try:
         with open(DB_REGISTRY_PATH, 'w', encoding='utf-8') as f:
             json.dump(registry, f, indent=2, ensure_ascii=False)
@@ -40,77 +36,54 @@ def save_registry(registry):
         print("Registry save error:", e)
 
 def get_user_id():
-    """Har bir Telegram user uchun UNIQUE ID (100% ishonchli)"""
-    # 1. URL dan Telegram ID (eng ishonchli)
     tg_user = request.args.get('tg_user')
     if tg_user and tg_user.isdigit():
         uid = 'tg_' + tg_user
         session['session_id'] = uid
         session['tg_user'] = tg_user
         return uid
-    
-    # 2. Session dan Telegram ID
     if session.get('tg_user'):
         uid = 'tg_' + str(session['tg_user'])
         session['session_id'] = uid
         return uid
-    
-    # 3. Fallback - random (faqat brauzerda)
     if 'session_id' not in session:
         session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
     return session['session_id']
 
 def ensure_session_id():
-    """Telegram ID ni kafolatlash"""
-    # URL dan
     tg_user = request.args.get('tg_user')
     if tg_user and tg_user.isdigit():
         session['session_id'] = 'tg_' + tg_user
         session['tg_user'] = tg_user
         return session['session_id']
-    
-    # Session dan
     if session.get('tg_user'):
         session['session_id'] = 'tg_' + str(session['tg_user'])
         return session['session_id']
-    
-    # Fallback
     if 'session_id' not in session:
         session['session_id'] = hashlib.sha256(os.urandom(32)).hexdigest()[:32]
     return session['session_id']
 
 def get_user_db_path():
-    """Joriy foydalanuvchining database fayli (xavfsiz)"""
     db_name = session.get('db_name')
     if not db_name or not re.match(r'^[a-zA-Z0-9_]+$', db_name):
-        return DB_PATH  # Default baza
-    
+        return DB_PATH
     registry = load_registry()
     if db_name not in registry:
         return DB_PATH
-    
-    # XAVFSIZLIK: Faqat egasi YOKI ruxsat berilganlar kira oladi
     entry = registry[db_name]
     current_session = get_user_id()
-    allowed_sessions = entry.get('allowed_sessions', [])
-    
     if entry.get('owner_session') == current_session:
         return os.path.join(DATA_DIR, db_name + ".db")
-    
-    if current_session in allowed_sessions:
+    if current_session in entry.get('allowed_sessions', []):
         return os.path.join(DATA_DIR, db_name + ".db")
-    
-    # HUQUQ YO'Q - default bazaga qaytarish
     session.pop('db_name', None)
     return DB_PATH
 
 def get_db():
-    """Database connection"""
     if "db" not in g:
         db_path = get_user_db_path()
         g.db = sqlite3.connect(db_path)
         g.db.row_factory = sqlite3.Row
-        # Jadvallarni avtomatik yaratish
         g.db.executescript("""
             CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE IF NOT EXISTS sales (id INTEGER PRIMARY KEY AUTOINCREMENT, total REAL NOT NULL, payment TEXT NOT NULL, customer_phone TEXT, customer_name TEXT DEFAULT '', debt REAL DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -123,9 +96,8 @@ def get_db():
 @app.teardown_appcontext
 def close_db(exc):
     db = g.pop("db", None)
-    if db: db.close()
-
-
+    if db:
+        db.close()
 
 def db_error(msg):
     return render_template_string("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>" + CSS + "</style></head><body>" + NAV_HTML + "<div style='padding:24px;max-width:500px;margin:60px auto;'><div class='card' style='text-align:center;padding:40px;'><div style='font-size:56px;margin-bottom:16px;'>❌</div><h1 style='font-size:24px;margin-bottom:12px;color:var(--red);'>Xato</h1><p style='color:var(--dim);margin-bottom:24px;'>" + msg + "</p><a href='/db' class='btn btn-primary' style='padding:16px;'>← Orqaga</a></div></div></body></html>")
@@ -133,98 +105,13 @@ def db_error(msg):
 # ═══════════════════════════════════════
 # 🎨 PREMIUM CSS
 # ═══════════════════════════════════════
-CSS = """@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-:root{--bg:#0a0e1a;--card:#111827;--border:#1e293b;--primary:#3b82f6;--pg:rgba(59,130,246,.3);--green:#10b981;--gg:rgba(16,185,129,.3);--red:#ef4444;--yellow:#f59e0b;--text:#f1f5f9;--dim:#94a3b8}
-*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
-.nav{background:rgba(17,24,39,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 24px;height:64px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
-.nav-brand{font-size:22px;font-weight:800;background:linear-gradient(135deg,#3b82f6,#10b981);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.nav-links{display:flex;gap:6px}.nav-links a{color:var(--dim);text-decoration:none;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;transition:.2s}
-.nav-links a:hover{color:var(--text);background:rgba(255,255,255,.05)}
-.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;transition:.3s}
-.btn{padding:14px 24px;border-radius:12px;border:none;font-weight:700;font-size:15px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:#fff}
-.btn:active{transform:scale(.97)}.btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 4px 15px var(--pg)}
-.btn-green{background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 15px var(--gg)}
-.btn-red{background:linear-gradient(135deg,#ef4444,#dc2626)}.btn-gray{background:#334155}
-.btn-sm{padding:10px 16px;font-size:13px;border-radius:10px}
-.input{width:100%;padding:14px 16px;border-radius:12px;background:rgba(15,23,42,.8);color:var(--text);border:2px solid var(--border);font-size:15px;font-family:inherit;outline:none;transition:.2s}
-.input:focus{border-color:var(--primary)}
-.grid{display:grid;gap:16px}.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
-.stat-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px;position:relative;overflow:hidden}
-.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--green))}
-.stat-card.green::before{background:linear-gradient(90deg,#10b981,#34d399)}
-.stat-card.yellow::before{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
-.stat-card.red::before{background:linear-gradient(90deg,#ef4444,#f87171)}
-.stat-label{font-size:13px;color:var(--dim);margin-bottom:8px;font-weight:600}
-.stat-value{font-size:30px;font-weight:900;letter-spacing:-1px}
-.table-wrap{overflow-x:auto;border-radius:20px;border:1px solid var(--border)}
-table{width:100%;border-collapse:collapse}
-th{background:rgba(15,23,42,.5);padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:700}
-td{padding:14px 16px;border-top:1px solid var(--border);font-size:14px}tr:hover td{background:rgba(255,255,255,.02)}
-.badge{display:inline-block;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.5px}
-.badge-green{background:rgba(16,185,129,.15);color:#34d399}.badge-red{background:rgba(239,68,68,.15);color:#f87171}
-.badge-blue{background:rgba(59,130,246,.15);color:#60a5fa}.badge-yellow{background:rgba(245,158,11,.15);color:#fbbf24}
-.cart-item{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:12px;margin-bottom:8px}
-.qty-btn{width:40px;height:40px;border-radius:10px;border:none;background:var(--primary);color:#fff;font-weight:700;font-size:18px;cursor:pointer}
-.total-bar{background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(59,130,246,.1));border:1px solid rgba(16,185,129,.2);border-radius:20px;padding:20px 24px;margin-top:16px}
-.total-amount{font-size:36px;font-weight:900;color:var(--green);letter-spacing:-1px}
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center}
-.modal-overlay.active{display:flex}
-.modal{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px;max-width:480px;width:90%}
-.mnav{display:none}
-.success-banner{padding:16px 20px;margin-bottom:20px;background:rgba(16,185,129,.1);border:2px solid var(--green);border-radius:14px;display:flex;align-items:center;gap:12px;animation:fadeIn .4s ease}
-.db-badge{display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:700;background:rgba(59,130,246,.15);color:#60a5fa;margin-left:8px}
-@keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:768px){.g2,.g3,.g4{grid-template-columns:1fr}.nav{padding:0 16px;height:60px}.nav-brand{font-size:18px}.nav-links{display:none}body{padding-bottom:80px}
-.mnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.98);backdrop-filter:blur(20px);border-top:1px solid var(--border);z-index:100;padding:8px 4px calc(8px + env(safe-area-inset-bottom));justify-content:space-around}
-.mnav a{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--dim);text-decoration:none;font-size:22px;padding:6px 12px;border-radius:10px}
-.mnav a:active{background:rgba(59,130,246,.15);color:var(--primary)}.mnav span{font-size:10px;font-weight:700}}
-"""
+CSS = "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');:root{--bg:#0a0e1a;--card:#111827;--border:#1e293b;--primary:#3b82f6;--pg:rgba(59,130,246,.3);--green:#10b981;--gg:rgba(16,185,129,.3);--red:#ef4444;--yellow:#f59e0b;--text:#f1f5f9;--dim:#94a3b8}*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}.nav{background:rgba(17,24,39,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 24px;height:64px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}.nav-brand{font-size:22px;font-weight:800;background:linear-gradient(135deg,#3b82f6,#10b981);-webkit-background-clip:text;-webkit-text-fill-color:transparent}.nav-links{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.nav-links a{color:var(--dim);text-decoration:none;padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;transition:.2s}.nav-links a:hover{color:var(--text);background:rgba(255,255,255,.05)}.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;transition:.3s}.btn{padding:14px 24px;border-radius:12px;border:none;font-weight:700;font-size:15px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:#fff}.btn:active{transform:scale(.97)}.btn-primary{background:linear-gradient(135deg,#3b82f6,#2563eb);box-shadow:0 4px 15px var(--pg)}.btn-green{background:linear-gradient(135deg,#10b981,#059669);box-shadow:0 4px 15px var(--gg)}.btn-red{background:linear-gradient(135deg,#ef4444,#dc2626)}.btn-gray{background:#334155}.btn-sm{padding:10px 16px;font-size:13px;border-radius:10px}.input{width:100%;padding:14px 16px;border-radius:12px;background:rgba(15,23,42,.8);color:var(--text);border:2px solid var(--border);font-size:15px;font-family:inherit;outline:none;transition:.2s}.input:focus{border-color:var(--primary)}.grid{display:grid;gap:16px}.g2{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.stat-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px;position:relative;overflow:hidden}.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--green))}.stat-card.green::before{background:linear-gradient(90deg,#10b981,#34d399)}.stat-card.yellow::before{background:linear-gradient(90deg,#f59e0b,#fbbf24)}.stat-card.red::before{background:linear-gradient(90deg,#ef4444,#f87171)}.stat-label{font-size:13px;color:var(--dim);margin-bottom:8px;font-weight:600}.stat-value{font-size:30px;font-weight:900;letter-spacing:-1px}.table-wrap{overflow-x:auto;border-radius:20px;border:1px solid var(--border)}table{width:100%;border-collapse:collapse}th{background:rgba(15,23,42,.5);padding:14px 16px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:700}td{padding:14px 16px;border-top:1px solid var(--border);font-size:14px}tr:hover td{background:rgba(255,255,255,.02)}.badge{display:inline-block;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.5px}.badge-green{background:rgba(16,185,129,.15);color:#34d399}.badge-red{background:rgba(239,68,68,.15);color:#f87171}.badge-blue{background:rgba(59,130,246,.15);color:#60a5fa}.badge-yellow{background:rgba(245,158,11,.15);color:#fbbf24}.cart-item{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:rgba(15,23,42,.5);border:1px solid var(--border);border-radius:12px;margin-bottom:8px}.qty-btn{width:40px;height:40px;border-radius:10px;border:none;background:var(--primary);color:#fff;font-weight:700;font-size:18px;cursor:pointer}.total-bar{background:linear-gradient(135deg,rgba(16,185,129,.1),rgba(59,130,246,.1));border:1px solid rgba(16,185,129,.2);border-radius:20px;padding:20px 24px;margin-top:16px}.total-amount{font-size:36px;font-weight:900;color:var(--green);letter-spacing:-1px}.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center}.modal-overlay.active{display:flex}.modal{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px;max-width:480px;width:90%}.mnav{display:none}.success-banner{padding:16px 20px;margin-bottom:20px;background:rgba(16,185,129,.1);border:2px solid var(--green);border-radius:14px;display:flex;align-items:center;gap:12px;animation:fadeIn .4s ease}.db-badge{display:inline-block;padding:4px 10px;border-radius:8px;font-size:11px;font-weight:700;background:rgba(59,130,246,.15);color:#60a5fa;margin-left:8px}@keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}@media(max-width:768px){.g2,.g3,.g4{grid-template-columns:1fr}.nav{padding:0 16px;height:60px}.nav-brand{font-size:18px}.nav-links{display:none}body{padding-bottom:80px}.mnav{display:flex;position:fixed;bottom:0;left:0;right:0;background:rgba(17,24,39,.98);backdrop-filter:blur(20px);border-top:1px solid var(--border);z-index:100;padding:8px 4px calc(8px + env(safe-area-inset-bottom));justify-content:space-around}.mnav a{display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--dim);text-decoration:none;font-size:22px;padding:6px 12px;border-radius:10px}.mnav a:active{background:rgba(59,130,246,.15);color:var(--primary)}.mnav span{font-size:10px;font-weight:700}}"
 
-NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/reports'>📈 Hisobot</a><a href='/db' style='color:var(--primary);'>🗄️ Baza</a></div></div>"
+NAV_HTML = "<div class='nav'><div class='nav-brand'>🏪 SmartStore</div><div class='nav-links'><a href='/dashboard'>📊 Panel</a><a href='/pos'>🛒 Kassa</a><a href='/products'>📦 Mahsulot</a><a href='/sales'>🧾 Sotuv</a><a href='/debts'>💳 Qarzdor</a><a href='/reports'>📈 Hisobot</a><a href='/db' style='color:var(--primary);'>🗄️ Baza</a></div></div>"
 
 MOBILE_NAV = "<div class='mnav'><a href='/dashboard'>📊<span>Panel</span></a><a href='/pos'>🛒<span>Kassa</span></a><a href='/products'>📦<span>Mahsulot</span></a><a href='/sales'>🧾<span>Sotuv</span></a><a href='/debts'>💳<span>Qarzdor</span></a><a href='/reports'>📈<span>Hisobot</span></a><a href='/db'>🗄️<span>Baza</span></a></div>"
 
-TG_SCRIPT = """<script src='https://telegram.org/js/telegram-web-app.js'></script>
-<script>
-if(window.Telegram&&Telegram.WebApp){
-  Telegram.WebApp.ready();
-  Telegram.WebApp.expand();
-  
-  // Telegram user ID ni olish
-  var tgUser = null;
-  try {
-    if(Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user){
-      tgUser = Telegram.WebApp.initDataUnsafe.user.id;
-    }
-  } catch(e){}
-  
-  // Agar Telegram ID bor bo'lsa - barcha link'larga qo'shish
-  if(tgUser){
-    // Hozirgi URL ga qo'shish
-    if(location.search.indexOf('tg_user=') === -1){
-      var sep = location.search ? '&' : '?';
-      var newUrl = location.pathname + location.search + sep + 'tg_user=' + tgUser;
-      history.replaceState(null, '', newUrl);
-    }
-    
-    // Barcha link'larga qo'shish
-    function addTgUserToLinks(){
-      document.querySelectorAll('a[href]').forEach(function(a){
-        var href = a.getAttribute('href');
-        if(href && href.startsWith('/') && !href.startsWith('//') && href.indexOf('tg_user=') === -1){
-          var sep = href.indexOf('?') !== -1 ? '&' : '?';
-          a.setAttribute('href', href + sep + 'tg_user=' + tgUser);
-        }
-      });
-    }
-    
-    // Sahifa yuklanganda va DOM o'zgarganda
-    addTgUserToLinks();
-    var observer = new MutationObserver(addTgUserToLinks);
-    observer.observe(document.body, {childList: true, subtree: true});
-  }
-}
-</script>"""
+TG_SCRIPT = "<script src='https://telegram.org/js/telegram-web-app.js'></script><script>if(window.Telegram&&Telegram.WebApp){Telegram.WebApp.ready();Telegram.WebApp.expand();}</script>"
 
 def RP(tpl, **ctx):
     full = "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'><title>SmartStore</title>" + TG_SCRIPT + "<style>" + CSS + "</style></head><body>" + NAV_HTML + tpl + MOBILE_NAV + "</body></html>"
@@ -235,10 +122,6 @@ def RP(tpl, **ctx):
 # ═══════════════════════════════════════
 @app.route("/")
 def index():
-    tg_user = request.args.get('tg_user')
-    if tg_user and tg_user.isdigit():
-        session['session_id'] = 'tg_' + tg_user
-        session['tg_user'] = tg_user
     ensure_session_id()
     return redirect("/dashboard")
 
@@ -247,13 +130,9 @@ def db_page():
     ensure_session_id()
     db_name = session.get('db_name')
     registry = load_registry()
-    existing_dbs = list(registry.keys())
     current_session = get_user_id()
-    
-    # FAQAT egasiga tegishli bazalar (boshqalarniki KO'RINMAYDI)
-    my_dbs = [{"name": name, "password": data.get("password", ""), "is_owner": True} 
-              for name, data in registry.items() 
-              if data.get('owner_session') == current_session]
+    my_dbs = [{"name": name, "password": data.get("password", ""), "is_owner": True} for name, data in registry.items() if data.get('owner_session') == current_session]
+    existing_dbs = list(registry.keys())
     
     return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;">
     <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🗄️ Database Boshqaruvi</h1>
@@ -284,15 +163,14 @@ def db_page():
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <div>
                     <span style="font-weight:700;font-size:16px;">🗄️ {{db.name}}</span>
-                    {%if db.is_owner%}<span class="badge badge-green" style="margin-left:8px;">👑 Egasi</span>{%endif%}
+                    <span class="badge badge-green" style="margin-left:8px;">👑 Egasi</span>
                 </div>
                 <a href="/db/switch/{{db.name}}" class="btn btn-primary btn-sm">O'tish</a>
             </div>
             <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(59,130,246,.1);border-radius:10px;">
                 <span style="font-size:12px;color:var(--dim);">🔑 Parol:</span>
                 <code style="font-family:monospace;font-size:14px;color:#60a5fa;font-weight:700;letter-spacing:1px;">{{db.password}}</code>
-                <button onclick="navigator.clipboard.writeText('{{db.password}}');this.textContent='✅';setTimeout(()=>this.textContent='📋',1500)" 
-                        style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:4px 8px;" title="Nusxalash">📋</button>
+                <button onclick="navigator.clipboard.writeText('{{db.password}}');this.textContent='✅';setTimeout(()=>this.textContent='📋',1500)" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:4px 8px;" title="Nusxalash">📋</button>
             </div>
         </div>
         {%endfor%}
@@ -343,8 +221,6 @@ def db_create():
         return db_error("Bu nom allaqachon mavjud! Boshqa nom tanlang yoki ulaning.")
     
     current_session = get_user_id()
-    
-    # JSON registry ga saqlash (parol OCHIQ!)
     registry[db_name] = {
         "password": password,
         "owner_session": current_session,
@@ -353,7 +229,6 @@ def db_create():
     }
     save_registry(registry)
     
-    # Database yaratish
     db = sqlite3.connect(db_path)
     db.executescript("""
         CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, barcode TEXT UNIQUE NOT NULL, price REAL NOT NULL CHECK(price>=0), min_stock INTEGER DEFAULT 5, stock INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
@@ -386,17 +261,14 @@ def db_connect():
     saved_password = entry.get("password", "")
     current_session = get_user_id()
     
-    # Agar egasi bo'lsa - avtomatik ulanadi
     if entry.get('owner_session') == current_session:
         session['db_name'] = db_name
         session['db_message'] = "O'z bazangizga o'tdingiz: " + db_name
         return redirect("/dashboard")
     
-    # Boshqanikiga - faqat parol bilan
     if password != saved_password:
         return db_error("Noto'g'ri parol!")
     
-    # Ruxsat berilganlar ro'yxatiga qo'shish
     if current_session not in entry.get('allowed_sessions', []):
         entry.setdefault('allowed_sessions', []).append(current_session)
         registry[db_name] = entry
@@ -425,13 +297,9 @@ def db_switch(db_name):
 
 @app.route("/db/disconnect")
 def db_disconnect():
-    # FAQAT joriy foydalanuvchining bazasini uzish
     current_uid = get_user_id()
     db_name = session.get('db_name')
     
-    print(f"🔌 Disconnect: UID={current_uid}, DB={db_name}")
-    
-    # Agar custom baza bo'lsa - allowed_sessions dan olib tashlash
     if db_name and db_name != 'default':
         registry = load_registry()
         if db_name in registry:
@@ -439,20 +307,14 @@ def db_disconnect():
             owner = entry.get('owner_session', '')
             allowed = entry.get('allowed_sessions', [])
             
-            print(f"   Owner: {owner}, Allowed: {allowed}")
-            
-            # Egasi uzsa - baza SAQLANIB QOLADI, faqat session tozalanadi
             if owner == current_uid:
-                print(f"   ✅ Egasi uzdi - baza saqlanib qoladi")
-            # Boshqa ulangan uzsa - faqat o'zini olib tashlaydi
+                pass
             elif current_uid in allowed:
                 allowed.remove(current_uid)
                 entry['allowed_sessions'] = allowed
                 registry[db_name] = entry
                 save_registry(registry)
-                print(f"   ✅ Ulangan uzdi - allowed_sessions dan olib tashlandi")
     
-    # FAQAT shu foydalanuvchining session'ini tozalash
     session.pop('db_name', None)
     session.pop('db_message', None)
     return redirect("/dashboard")
@@ -460,20 +322,20 @@ def db_disconnect():
 @app.route("/dashboard")
 def dashboard():
     ensure_session_id()
-    db=get_db()
-    today=datetime.now().strftime("%Y-%m-%d")
-    ts=db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
-    tc=db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=?",(today,)).fetchone()[0]
-    tp=db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
-    ls=db.execute("SELECT COUNT(*) FROM products WHERE stock<=min_stock").fetchone()[0]
-    td=db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE total>0").fetchone()[0]
-    ws=db.execute("SELECT date(created_at) d,SUM(total) s FROM sales WHERE created_at>=date('now','-7 days') GROUP BY d ORDER BY d").fetchall()
-    top=db.execute("SELECT p.name,SUM(si.qty) t FROM sale_items si JOIN products p ON p.id=si.product_id GROUP BY si.product_id ORDER BY t DESC LIMIT 5").fetchall()
+    db = get_db()
+    today = datetime.now().strftime("%Y-%m-%d")
+    ts = db.execute("SELECT COALESCE(SUM(total),0) FROM sales WHERE date(created_at)=?", (today,)).fetchone()[0]
+    tc = db.execute("SELECT COUNT(*) FROM sales WHERE date(created_at)=?", (today,)).fetchone()[0]
+    tp = db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+    ls = db.execute("SELECT COUNT(*) FROM products WHERE stock<=min_stock").fetchone()[0]
+    td = db.execute("SELECT COALESCE(SUM(total),0) FROM debts WHERE total>0").fetchone()[0]
+    ws = db.execute("SELECT date(created_at) d,SUM(total) s FROM sales WHERE created_at>=date('now','-7 days') GROUP BY d ORDER BY d").fetchall()
+    top = db.execute("SELECT p.name,SUM(si.qty) t FROM sale_items si JOIN products p ON p.id=si.product_id GROUP BY si.product_id ORDER BY t DESC LIMIT 5").fetchall()
     
     db_msg = session.pop('db_message', None)
     db_name = session.get('db_name', 'default')
     db_badge = '<span class="db-badge">🗄️ ' + db_name + '</span>' if db_name != 'default' else '<span class="db-badge" style="background:rgba(148,163,184,.15);color:var(--dim);">📁 Default</span>'
-    banner = '<div class="success-banner" style="flex-direction:column;align-items:flex-start;gap:8px;"><div style="display:flex;align-items:center;gap:12px;width:100%;"><span style="font-size:26px;">🗄️</span><span style="font-size:15px;font-weight:700;color:var(--green);flex:1;">' + db_msg + '</span></div></div>' if db_msg else ''
+    banner = '<div class="success-banner"><span style="font-size:26px;">🗄️</span><span style="font-size:15px;font-weight:700;color:var(--green);">' + db_msg + '</span></div>' if db_msg else ''
     
     return RP(banner + """<div style="padding:24px;max-width:1400px;margin:0 auto;">
     <h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">📊 Dashboard """ + db_badge + """</h1>
@@ -485,14 +347,15 @@ def dashboard():
     <div class="grid g2">
         <div class="card"><h2 style="margin-bottom:16px;font-size:18px;">🏆 Top 5</h2>{%for p in top%}<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);"><span>{{p.name}}</span><span class="badge badge-blue">{{p.t}} dona</span></div>{%else%}<p style="color:var(--dim);text-align:center;padding:20px;">Hali savdo yo'q</p>{%endfor%}</div>
         <div class="card"><h2 style="margin-bottom:16px;font-size:18px;">📈 7 kunlik</h2>{%for s in ws%}<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span style="color:var(--dim);font-size:13px;">{{s.d}}</span><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(s.s)}}</span></div>{%endfor%}</div></div>
-    {%if td>0%}<div class="card" style="margin-top:24px;border-color:rgba(245,158,11,.3);"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:14px;color:var(--dim);">💸 Jami qarz</div><div style="font-size:28px;font-weight:800;color:var(--yellow);margin-top:4px;">{{"{:,.0f}".format(td)}} so'm</div></div><a href="/debts" class="btn btn-primary">Qarzdorlar →</a></div></div>{%endif%}</div>""",ts=ts,tc=tc,tp=tp,ls=ls,td=td,ws=ws,top=top)
+    {%if td>0%}<div class="card" style="margin-top:24px;border-color:rgba(245,158,11,.3);"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:14px;color:var(--dim);">💸 Jami qarz</div><div style="font-size:28px;font-weight:800;color:var(--yellow);margin-top:4px;">{{"{:,.0f}".format(td)}} so'm</div></div><a href="/debts" class="btn btn-primary">Qarzdorlar →</a></div></div>{%endif%}</div>""", ts=ts, tc=tc, tp=tp, ls=ls, td=td, ws=ws, top=top)
 
 @app.route("/products")
 def products_list():
     ensure_session_id()
-    db=get_db(); q=request.args.get("q","")
-    rows=db.execute("SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? ORDER BY id DESC",("%"+q+"%","%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
-    low=[r for r in rows if r["stock"]<=r["min_stock"]]
+    db = get_db()
+    q = request.args.get("q", "")
+    rows = db.execute("SELECT * FROM products WHERE name LIKE ? OR barcode LIKE ? ORDER BY id DESC", ("%"+q+"%", "%"+q+"%")).fetchall() if q else db.execute("SELECT * FROM products ORDER BY id DESC").fetchall()
+    low = [r for r in rows if r["stock"] <= r["min_stock"]]
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;"><h1 style="font-size:28px;font-weight:800;">📦 Mahsulotlar <span style="color:var(--dim);font-size:16px;">({{rows|length}})</span></h1><a href="/products/new" class="btn btn-green">➕ Yangi</a></div>
     <form method="GET" style="display:flex;gap:8px;margin-bottom:20px;"><input class="input" name="q" value="{{q}}" placeholder="🔍 Qidiruv..." style="margin:0;"><button class="btn btn-primary">Qidirish</button></form>
     {%if low%}<div class="card" style="margin-bottom:20px;border-color:rgba(239,68,68,.4);"><h3 style="color:var(--red);margin-bottom:10px;">⚠️ Kam qoldiq ({{low|length}})</h3>{%for p in low[:5]%}<div style="padding:4px 0;font-size:13px;">• {{p.name}} — {{p.stock}}/{{p.min_stock}}</div>{%endfor%}</div>{%endif%}
@@ -500,46 +363,52 @@ def products_list():
     {%for p in rows%}<tr><td><strong>{{p.name}}</strong></td><td style="font-family:monospace;color:var(--dim);">{{p.barcode}}</td><td style="font-weight:600;">{{"{:,.0f}".format(p.price)}}</td><td>{{p.stock}}</td>
     <td>{%if p.stock<=p.min_stock%}<span class="badge badge-red">KAM</span>{%else%}<span class="badge badge-green">OK</span>{%endif%}</td>
     <td><a href="/products/{{p.id}}/edit" class="btn btn-gray btn-sm">✏️</a><form method="POST" action="/products/{{p.id}}/delete" style="display:inline;" onsubmit="return confirm('Ochirilsinmi?')"><button class="btn btn-red btn-sm">🗑</button></form></td></tr>
-    {%else%}<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:50px;">Mahsulot yo'q</td></tr>{%endfor%}</tbody></table></div></div>""",rows=rows,q=q,low=low)
+    {%else%}<tr><td colspan="6" style="text-align:center;color:var(--dim);padding:50px;">Mahsulot yo'q</td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows, q=q, low=low)
 
-@app.route("/products/new",methods=["GET","POST"])
+@app.route("/products/new", methods=["GET", "POST"])
 def product_new():
     ensure_session_id()
-    if request.method=="POST":
-        db=get_db()
+    if request.method == "POST":
+        db = get_db()
         try:
-            db.execute("INSERT INTO products(name,barcode,price,min_stock,stock) VALUES(?,?,?,?,?)",(request.form["name"].strip(),request.form["barcode"].strip(),float(request.form["price"]),int(request.form.get("min_stock",5)),int(request.form.get("stock",0))))
-            db.commit(); return redirect("/products")
+            db.execute("INSERT INTO products(name,barcode,price,min_stock,stock) VALUES(?,?,?,?,?)", (request.form["name"].strip(), request.form["barcode"].strip(), float(request.form["price"]), int(request.form.get("min_stock", 5)), int(request.form.get("stock", 0))))
+            db.commit()
+            return redirect("/products")
         except sqlite3.IntegrityError:
-            return "❌ Barcode mavjud",400
-    bc=request.args.get("barcode","")
+            return "❌ Barcode mavjud", 400
+    bc = request.args.get("barcode", "")
     return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;"><div class="card"><h1 style="margin-bottom:24px;font-size:22px;">➕ Yangi mahsulot</h1><form method="POST">
     <label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;">Nomi *</label><input class="input" name="name" required placeholder="Coca-Cola 1.5L">
     <label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;">Shtrix-kod *</label><input class="input" name="barcode" value="{{bc}}" required>
     <label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;">Narxi *</label><input class="input" type="number" step="0.01" name="price" required>
     <div class="grid g2" style="margin-top:4px;"><div><label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;">Min qoldiq</label><input class="input" type="number" name="min_stock" value="5"></div>
     <div><label style="font-size:13px;color:var(--dim);margin-bottom:6px;display:block;">Qoldiq</label><input class="input" type="number" name="stock" value="0"></div></div>
-    <button class="btn btn-green" style="width:100%;margin-top:20px;justify-content:center;font-size:16px;padding:16px;">💾 Saqlash</button></form></div></div>""",bc=bc)
+    <button class="btn btn-green" style="width:100%;margin-top:20px;justify-content:center;font-size:16px;padding:16px;">💾 Saqlash</button></form></div></div>""", bc=bc)
 
-@app.route("/products/<int:pid>/edit",methods=["GET","POST"])
+@app.route("/products/<int:pid>/edit", methods=["GET", "POST"])
 def product_edit(pid):
     ensure_session_id()
-    db=get_db()
-    if request.method=="POST":
-        db.execute("UPDATE products SET name=?,barcode=?,price=?,min_stock=?,stock=? WHERE id=?",(request.form["name"],request.form["barcode"],float(request.form["price"]),int(request.form["min_stock"]),int(request.form["stock"]),pid))
-        db.commit(); return redirect("/products")
-    p=db.execute("SELECT * FROM products WHERE id=?",(pid,)).fetchone()
-    if not p: return "Yo'q",404
+    db = get_db()
+    if request.method == "POST":
+        db.execute("UPDATE products SET name=?,barcode=?,price=?,min_stock=?,stock=? WHERE id=?", (request.form["name"], request.form["barcode"], float(request.form["price"]), int(request.form["min_stock"]), int(request.form["stock"]), pid))
+        db.commit()
+        return redirect("/products")
+    p = db.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+    if not p:
+        return "Yo'q", 404
     return RP("""<div style="padding:24px;max-width:600px;margin:0 auto;"><div class="card"><h1 style="margin-bottom:24px;font-size:22px;">✏️ Tahrirlash</h1><form method="POST">
     <input class="input" name="name" value="{{p.name}}" required><input class="input" name="barcode" value="{{p.barcode}}" required>
     <input class="input" type="number" step="0.01" name="price" value="{{p.price}}" required>
     <div class="grid g2"><input class="input" type="number" name="min_stock" value="{{p.min_stock}}"><input class="input" type="number" name="stock" value="{{p.stock}}"></div>
-    <button class="btn btn-green" style="width:100%;margin-top:20px;justify-content:center;font-size:16px;padding:16px;">💾 Saqlash</button></form></div></div>""",p=p)
+    <button class="btn btn-green" style="width:100%;margin-top:20px;justify-content:center;font-size:16px;padding:16px;">💾 Saqlash</button></form></div></div>""", p=p)
 
-@app.route("/products/<int:pid>/delete",methods=["POST"])
+@app.route("/products/<int:pid>/delete", methods=["POST"])
 def product_delete(pid):
     ensure_session_id()
-    db=get_db();db.execute("DELETE FROM products WHERE id=?",(pid,));db.commit();return redirect("/products")
+    db = get_db()
+    db.execute("DELETE FROM products WHERE id=?", (pid,))
+    db.commit()
+    return redirect("/products")
 
 @app.route("/pos")
 def pos():
@@ -592,14 +461,11 @@ var onErr = function(){};
 
 var ok = false;
 
-// 🎯 Bosqich 1: Orqa kamera - ENG ISHONCHLI (sodda config)
 try {
     await sc.start({facingMode: "environment"}, {fps: 30, qrbox: {width: 250, height: 150}}, onOk, onErr);
     ok = true;
-    console.log('✅ Bosqich 1: environment ishlayapti');
-} catch(e){ console.log('⚠️ Bosqich 1 xato:', e); }
+} catch(e){}
 
-// 🎯 Bosqich 2: Yuqori sifat (60 FPS, 1080p) - advanced SIZ
 if(!ok){
     try {
         await sc.start(
@@ -608,11 +474,9 @@ if(!ok){
             onOk, onErr
         );
         ok = true;
-        console.log('✅ Bosqich 2: 60FPS 1080p ishlayapti');
-    } catch(e){ console.log('⚠️ Bosqich 2 xato:', e); }
+    } catch(e){}
 }
 
-// 🎯 Bosqich 3: Kameralar ro'yxatidan orqa kamerani tanlash
 if(!ok){
     try {
         var cams = await Html5Qrcode.getCameras();
@@ -624,28 +488,23 @@ if(!ok){
             }
             await sc.start(camId, {fps: 30, qrbox: {width: 250, height: 150}}, onOk, onErr);
             ok = true;
-            console.log('✅ Bosqich 3: orqa kamera topildi');
         }
-    } catch(e){ console.log('⚠️ Bosqich 3 xato:', e); }
+    } catch(e){}
 }
 
-// 🎯 Bosqich 4: Istalgan mavjud kamera
 if(!ok){
     try {
         await sc.start({facingMode: "user"}, {fps: 30, qrbox: {width: 250, height: 150}}, onOk, onErr);
         ok = true;
-        console.log('✅ Bosqich 4: old kamera ishlayapti');
-    } catch(e){ console.log('⚠️ Bosqich 4 xato:', e); }
+    } catch(e){}
 }
 
-// ❌ Hech narsa ishlamasa
 if(!ok){
     sc = null;
-    region.innerHTML = '<div style="padding:20px;text-align:center;color:var(--red)">❌ Kamera ochilmadi<br><small style="color:var(--dim)">Ruxsatni tekshiring (HTTPS kerak)</small></div>';
+    region.innerHTML = '<div style="padding:20px;text-align:center;color:var(--red)">❌ Kamera ochilmadi<br><small style="color:var(--dim)">Ruxsatni tekshiring</small></div>';
     return;
 }
 
-// 💡 Torch + 🔍 Autofokus - kamera OCHILGANIDAN KEYIN (xavfsiz, try/catch)
 try {
     var video = document.querySelector('#sr video');
     if(video && video.srcObject){
@@ -653,75 +512,92 @@ try {
         if(track && track.getCapabilities){
             var caps = track.getCapabilities();
             var adv = {};
-            if(caps.torch){ adv.torch = true; console.log('💡 Torch yoqildi'); }
+            if(caps.torch){ adv.torch = true; }
             if(caps.focusMode && caps.focusMode.indexOf('continuous') !== -1){
                 adv.focusMode = 'continuous';
-                console.log('🔍 Autofokus yoqildi');
             }
             if(Object.keys(adv).length > 0){
                 await track.applyConstraints({advanced: [adv]});
             }
         }
     }
-} catch(e){ console.log('⚠️ Torch/autofokus ixtiyoriy:', e); }
+} catch(e){}
 
-console.log('🎉 Kamera ishga tushdi!');
 document.getElementById('sb').style.display = 'flex';
 }
 
 function xs(){if(sc){sc.stop().then(function(){sc.clear();sc=null});document.getElementById('sb').style.display='none'}}
-    function ms(){const v=document.getElementById('mb').value.trim();if(v){ab(v);document.getElementById('mb').value=''}}
-    document.getElementById('mb').addEventListener('keydown',function(e){if(e.key==='Enter')ms()});
-    function oc(){if(!C.length){alert('Savat bosh!');return}document.getElementById('cm').classList.add('active')}
-    function xc(){document.getElementById('cm').classList.remove('active')}
-    function openCredit(){document.getElementById('cm').classList.remove('active');document.getElementById('crm').classList.add('active')}
-    function backToPayment(){document.getElementById('crm').classList.remove('active');document.getElementById('cm').classList.add('active')}
-    async function doPay(t){let ph='',fn='';if(t==='credit'){fn=document.getElementById('cf').value.trim();ph=document.getElementById('cp').value.trim();if(!fn||!ph){alert('Ism va telefonni kiriting!');return}document.getElementById('crm').classList.remove('active')}const body={items:C.map(function(x){return{product_id:x.id,qty:x.qty}}),payment:t,customer_phone:ph,customer_name:fn};try{const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Xato');alert('✅ Chek #'+d.sale_id+'\\nJami: '+F(d.total)+' so\\'m');C=[];rc();xc();document.getElementById('cp').value='';document.getElementById('cf').value='';window.open('/sales/'+d.sale_id+'/receipt','_blank')}catch(e){alert('❌ '+e.message)}}
-    rc()</script>""")
+function ms(){const v=document.getElementById('mb').value.trim();if(v){ab(v);document.getElementById('mb').value=''}}
+document.getElementById('mb').addEventListener('keydown',function(e){if(e.key==='Enter')ms()});
+function oc(){if(!C.length){alert('Savat bosh!');return}document.getElementById('cm').classList.add('active')}
+function xc(){document.getElementById('cm').classList.remove('active')}
+function openCredit(){document.getElementById('cm').classList.remove('active');document.getElementById('crm').classList.add('active')}
+function backToPayment(){document.getElementById('crm').classList.remove('active');document.getElementById('cm').classList.add('active')}
+async function doPay(t){let ph='',fn='';if(t==='credit'){fn=document.getElementById('cf').value.trim();ph=document.getElementById('cp').value.trim();if(!fn||!ph){alert('Ism va telefonni kiriting!');return}document.getElementById('crm').classList.remove('active')}const body={items:C.map(function(x){return{product_id:x.id,qty:x.qty}}),payment:t,customer_phone:ph,customer_name:fn};try{const r=await fetch('/api/checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'Xato');alert('✅ Chek #'+d.sale_id+'\\nJami: '+F(d.total)+' so\\'m');C=[];rc();xc();document.getElementById('cp').value='';document.getElementById('cf').value='';window.open('/sales/'+d.sale_id+'/receipt','_blank')}catch(e){alert('❌ '+e.message)}}
+rc()</script>""")
 
 @app.route("/api/product/by-barcode")
 def api_pbc():
     ensure_session_id()
-    c=request.args.get("code","").strip()
-    if not c: return jsonify({"error":"code kerak"}),400
-    db=get_db(); p=db.execute("SELECT * FROM products WHERE barcode=?",(c,)).fetchone()
-    if not p: return jsonify({"error":"topilmadi"}),404
+    c = request.args.get("code", "").strip()
+    if not c:
+        return jsonify({"error": "code kerak"}), 400
+    db = get_db()
+    p = db.execute("SELECT * FROM products WHERE barcode=?", (c,)).fetchone()
+    if not p:
+        return jsonify({"error": "topilmadi"}), 404
     return jsonify(dict(p))
 
-@app.route("/api/checkout",methods=["POST"])
+@app.route("/api/checkout", methods=["POST"])
 def api_checkout():
     ensure_session_id()
     try:
         data = request.get_json(force=True, silent=True)
-        if not data: return jsonify({"error":"JSON yo'q"}),400
-        items = data.get("items",[]); payment = data.get("payment","cash"); phone = data.get("customer_phone",""); cname = data.get("customer_name","")
-        if not items: return jsonify({"error":"Savat bo'sh"}),400
-        db = get_db(); total = 0; prepared = []
+        if not data:
+            return jsonify({"error": "JSON yo'q"}), 400
+        items = data.get("items", [])
+        payment = data.get("payment", "cash")
+        phone = data.get("customer_phone", "")
+        cname = data.get("customer_name", "")
+        if not items:
+            return jsonify({"error": "Savat bo'sh"}), 400
+        db = get_db()
+        total = 0
+        prepared = []
         for item in items:
-            pid = item.get("product_id"); qty = item.get("qty",0)
-            if not pid or qty <= 0: raise Exception("Noto'g'ri ma'lumot")
-            p = db.execute("SELECT * FROM products WHERE id=?",(pid,)).fetchone()
-            if not p: raise Exception("Mahsulot topilmadi")
-            if p["stock"] < qty: raise Exception("{} yetarli emas!".format(p["name"]))
-            prepared.append((p,qty)); total += p["price"] * qty
+            pid = item.get("product_id")
+            qty = item.get("qty", 0)
+            if not pid or qty <= 0:
+                raise Exception("Noto'g'ri ma'lumot")
+            p = db.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
+            if not p:
+                raise Exception("Mahsulot topilmadi")
+            if p["stock"] < qty:
+                raise Exception("{} yetarli emas!".format(p["name"]))
+            prepared.append((p, qty))
+            total += p["price"] * qty
         debt = total if payment == "credit" else 0
-        cur = db.execute("INSERT INTO sales(total,payment,customer_phone,customer_name,debt) VALUES(?,?,?,?,?)",(total,payment,phone,cname,debt))
+        cur = db.execute("INSERT INTO sales(total,payment,customer_phone,customer_name,debt) VALUES(?,?,?,?,?)", (total, payment, phone, cname, debt))
         sid = cur.lastrowid
-        for p,q in prepared:
-            db.execute("INSERT INTO sale_items(sale_id,product_id,qty,price) VALUES(?,?,?,?)",(sid,p["id"],q,p["price"]))
-            db.execute("UPDATE products SET stock=stock-? WHERE id=?",(q,p["id"]))
+        for p, q in prepared:
+            db.execute("INSERT INTO sale_items(sale_id,product_id,qty,price) VALUES(?,?,?,?)", (sid, p["id"], q, p["price"]))
+            db.execute("UPDATE products SET stock=stock-? WHERE id=?", (q, p["id"]))
         if payment == "credit" and phone:
-            db.execute("INSERT INTO debts(phone,full_name,total,paid) VALUES(?,?,?,0) ON CONFLICT(phone) DO UPDATE SET full_name=?,total=total+?",(phone,cname or "Mijoz",debt,cname or "Mijoz",debt))
-        db.commit(); return jsonify({"sale_id":sid,"total":total})
+            db.execute("INSERT INTO debts(phone,full_name,total,paid) VALUES(?,?,?,0) ON CONFLICT(phone) DO UPDATE SET full_name=?,total=total+?", (phone, cname or "Mijoz", debt, cname or "Mijoz", debt))
+        db.commit()
+        return jsonify({"sale_id": sid, "total": total})
     except Exception as e:
-        try: db.rollback()
-        except: pass
-        return jsonify({"error":str(e)}),400
+        try:
+            db.rollback()
+        except:
+            pass
+        return jsonify({"error": str(e)}), 400
 
 @app.route("/sales")
 def sales_list():
     ensure_session_id()
-    db=get_db(); rows=db.execute("SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id LEFT JOIN products p ON p.id=si.product_id GROUP BY s.id ORDER BY s.id DESC LIMIT 100").fetchall()
+    db = get_db()
+    rows = db.execute("SELECT s.*, GROUP_CONCAT(p.name || ' x' || si.qty, ', ') as products FROM sales s LEFT JOIN sale_items si ON si.sale_id=s.id LEFT JOIN products p ON p.id=si.product_id GROUP BY s.id ORDER BY s.id DESC LIMIT 100").fetchall()
     return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">🧾 Sotuvlar</h1>
     <div class="table-wrap"><table><thead><tr><th>#</th><th>Sana</th><th>Mahsulotlar</th><th>Summa</th><th>To'lov</th><th>Mijoz</th><th>Chek</th></tr></thead><tbody>
     {%for s in rows%}<tr><td><strong>#{{s.id}}</strong></td><td style="font-size:13px;color:var(--dim);">{{s.created_at[:16]}}</td>
@@ -729,14 +605,12 @@ def sales_list():
     <td style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(s.total)}}</td>
     <td>{%if s.payment=='cash'%}<span class="badge badge-green">NAQD</span>{%elif s.payment=='card'%}<span class="badge badge-blue">KARTA</span>{%elif s.payment=='credit'%}<span class="badge badge-red">NASIYA</span>{%else%}<span class="badge badge-yellow">ARALASH</span>{%endif%}</td>
     <td style="font-size:12px;">{{s.customer_name or '-'}}{%if s.customer_phone%}<br>{{s.customer_phone}}{%endif%}</td>
-    <td><a href="/sales/{{s.id}}/receipt" target="_blank" class="btn btn-gray btn-sm">📄</a></td></tr>{%endfor%}</tbody></table></div></div>""",rows=rows)
+    <td><a href="/sales/{{s.id}}/receipt" target="_blank" class="btn btn-gray btn-sm">📄</a></td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows)
 
 @app.route("/sales/<int:sid>/receipt")
 def receipt(sid):
     ft = request.args.get("format", "html")
     
-    # Barcha bazalardan sale ni qidirish
-    import glob
     s = None
     items = []
     db = None
@@ -751,14 +625,12 @@ def receipt(sid):
                 db = temp_db
                 break
             temp_db.close()
-        except Exception as e:
-            print(f"DB search error: {e}")
+        except:
             continue
     
     if not s:
         return render_template_string("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{font-family:sans-serif;background:#f5f5f5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.box{background:#fff;padding:40px;border-radius:20px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.1)}.icon{font-size:64px;margin-bottom:20px}h1{color:#ef4444;margin-bottom:10px}p{color:#666}</style></head><body><div class='box'><div class='icon'>❌</div><h1>Chek topilmadi</h1><p>Bu chek mavjud emas yoki o'chirilgan</p><a href='/dashboard' style='display:inline-block;margin-top:20px;padding:12px 24px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:10px;'>← Panelga qaytish</a></div></body></html>")
     
-    # PDF format
     if ft == "pdf":
         try:
             from reportlab.lib.pagesizes import A6
@@ -770,14 +642,14 @@ def receipt(sid):
             c.setFont("Helvetica-Bold", 16)
             c.drawCentredString(w/2, h-20*mm, "SMARTSTORE")
             c.setFont("Helvetica", 10)
-            c.drawCentredString(w/2, h-28*mm, f"Chek #{sid} - {str(s['created_at'])[:19]}")
+            c.drawCentredString(w/2, h-28*mm, "Chek #{} - {}".format(sid, str(s['created_at'])[:19]))
             c.line(10*mm, h-32*mm, w-10*mm, h-32*mm)
             y = h - 40*mm
             c.setFont("Helvetica-Bold", 11)
             for it in items:
                 name = it["name"][:20]
-                qty_price = f"{it['qty']} x {int(it['price'])}"
-                total = f"{int(it['qty'] * it['price'])}"
+                qty_price = "{} x {}".format(it['qty'], int(it['price']))
+                total = "{}".format(int(it['qty'] * it['price']))
                 c.drawString(10*mm, y, name)
                 c.drawCentredString(w/2, y, qty_price)
                 c.drawRightString(w-10*mm, y, total)
@@ -785,32 +657,30 @@ def receipt(sid):
             c.line(10*mm, y-2*mm, w-10*mm, y-2*mm)
             y -= 10*mm
             c.setFont("Helvetica-Bold", 14)
-            c.drawRightString(w-10*mm, y, f"JAMI: {int(s['total'])} so'm")
+            c.drawRightString(w-10*mm, y, "JAMI: {} so'm".format(int(s['total'])))
             y -= 8*mm
             c.setFont("Helvetica", 10)
-            c.drawString(10*mm, y, f"To'lov: {s['payment'].upper()}")
+            c.drawString(10*mm, y, "To'lov: {}".format(s['payment'].upper()))
             if s["customer_name"]:
                 y -= 5*mm
-                c.drawString(10*mm, y, f"Mijoz: {s['customer_name']}")
+                c.drawString(10*mm, y, "Mijoz: {}".format(s["customer_name"]))
             if s["customer_phone"]:
                 y -= 5*mm
-                c.drawString(10*mm, y, f"Tel: {s['customer_phone']}")
+                c.drawString(10*mm, y, "Tel: {}".format(s["customer_phone"]))
             if s["debt"] > 0:
                 y -= 5*mm
                 c.setFillColorRGB(0.8, 0, 0)
-                c.drawString(10*mm, y, f"QARZ: {int(s['debt'])} so'm")
+                c.drawString(10*mm, y, "QARZ: {} so'm".format(int(s['debt'])))
             c.save()
             buf.seek(0)
             if db:
                 db.close()
-            return send_file(buf, download_name=f"chek-{sid}.pdf", mimetype="application/pdf")
-        except Exception as e:
-            print(f"PDF error: {e}")
+            return send_file(buf, download_name="chek-{}.pdf".format(sid), mimetype="application/pdf")
+        except:
             if db:
                 db.close()
             return "PDF xatosi", 500
     
-    # HTML format - Professional dizayn
     html_template = """<!DOCTYPE html>
 <html lang="uz">
 <head>
@@ -946,12 +816,13 @@ body{font-family:'Inter',sans-serif;background:linear-gradient(135deg,#667eea 0%
         db.close()
     return result
 
-
 @app.route("/debts")
 def debts_page():
     ensure_session_id()
-    db=get_db(); rows=db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC").fetchall(); td=sum(r["total"] for r in rows)
-    tp=sum(r["paid"] for r in rows) if rows else 0
+    db = get_db()
+    rows = db.execute("SELECT * FROM debts WHERE total>0 ORDER BY total DESC").fetchall()
+    td = sum(r["total"] for r in rows)
+    tp = sum(r["paid"] for r in rows) if rows else 0
     return RP("""<div style="padding:24px;max-width:1000px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:24px;">💳 Qarzdorlar</h1>
     <div class="grid g3" style="margin-bottom:20px;"><div class="stat-card red"><div class="stat-label">💸 Jami qarz</div><div class="stat-value">{{"{:,.0f}".format(td)}}</div></div>
     <div class="stat-card green"><div class="stat-label">✅ To'langan</div><div class="stat-value">{{"{:,.0f}".format(tp)}}</div></div>
@@ -959,99 +830,191 @@ def debts_page():
     <div class="table-wrap"><table><thead><tr><th>Ism Familiya</th><th>Telefon</th><th>Qarz</th><th>To'lov</th></tr></thead><tbody>
     {%for d in rows%}<tr><td><strong>{{d.full_name}}</strong></td><td style="font-family:monospace;">{{d.phone}}</td><td style="color:var(--red);font-weight:700;font-size:16px;">{{"{:,.0f}".format(d.total)}}</td>
     <td><form method="POST" action="/debts/{{d.id}}/pay" style="display:flex;gap:6px;"><input type="number" name="amount" placeholder="Summa" required style="width:120px;padding:8px;background:var(--bg);color:#fff;border:1px solid var(--border);border-radius:8px;"><button class="btn btn-green btn-sm">💰</button></form></td></tr>
-    {%else%}<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:50px;">✅ Qarzdor yo'q</td></tr>{%endfor%}</tbody></table></div></div>""",rows=rows,td=td,tp=tp)
+    {%else%}<tr><td colspan="4" style="text-align:center;color:var(--dim);padding:50px;">✅ Qarzdor yo'q</td></tr>{%endfor%}</tbody></table></div></div>""", rows=rows, td=td, tp=tp)
 
-@app.route("/debts/<int:did>/pay",methods=["POST"])
+@app.route("/debts/<int:did>/pay", methods=["POST"])
 def debt_pay(did):
     ensure_session_id()
-    amt=float(request.form["amount"]); db=get_db()
-    db.execute("UPDATE debts SET total=MAX(0,total-?), paid=COALESCE(paid,0)+? WHERE id=?",(amt,amt,did))
-    db.commit(); return redirect("/debts")
+    amt = float(request.form["amount"])
+    db = get_db()
+    db.execute("UPDATE debts SET total=MAX(0,total-?), paid=COALESCE(paid,0)+? WHERE id=?", (amt, amt, did))
+    db.commit()
+    return redirect("/debts")
 
 @app.route("/reports")
 def reports_page():
     ensure_session_id()
-    db=get_db(); p=request.args.get("period","day")
-    w={"day":"date(created_at)=date('now')","week":"created_at>=date('now','-7 days')","month":"created_at>=date('now','-30 days')"}.get(p,"date(created_at)=date('now')")
-    st=db.execute("SELECT COUNT(*) c,COALESCE(SUM(total),0) s FROM sales WHERE "+w).fetchone()
-    bp=db.execute("SELECT payment,SUM(total) s FROM sales WHERE "+w+" GROUP BY payment").fetchall()
-    tp=db.execute("SELECT p.name,SUM(si.qty) q,SUM(si.qty*si.price) s FROM sale_items si JOIN products p ON p.id=si.product_id GROUP BY si.product_id ORDER BY s DESC LIMIT 5").fetchall()
-    dc_=db.execute("SELECT COUNT(*) c FROM debts WHERE total>0").fetchone()[0]
-    given=db.execute("SELECT COALESCE(SUM(total+paid),0) FROM debts").fetchone()[0]
-    paid_=db.execute("SELECT COALESCE(SUM(paid),0) FROM debts").fetchone()[0]
-    rest=db.execute("SELECT COALESCE(SUM(total),0) FROM debts").fetchone()[0]
-    ac=(st["s"]/st["c"]) if st["c"]>0 else 0
-    return RP("""<div style="padding:16px;max-width:900px;margin:0 auto;"><h1 style="font-size:28px;font-weight:800;margin-bottom:16px;">📈 Hisobotlar</h1>
-    <div style="display:flex;gap:8px;margin-bottom:16px;"><a href="?period=day" class="btn {%if period=='day'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;">📅 Kun</a><a href="?period=week" class="btn {%if period=='week'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;">Hafta</a><a href="?period=month" class="btn {%if period=='month'%}btn-primary{%else%}btn-gray{%endif%}" style="flex:1;">Oy</a></div>
-    <button class="btn" onclick="window.print()" style="width:100%;padding:16px;margin-bottom:16px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);">📄 Hisobot yaratish</button>
-    <div class="grid g2" style="margin-bottom:12px;"><div class="stat-card"><div class="stat-label">💰 Jami savdo</div><div class="stat-value" style="color:var(--green);">{{"{:,.0f}".format(st.s)}} so'm</div></div>
-    <div class="stat-card green"><div class="stat-label">🧾 Cheklar</div><div class="stat-value">{{st.c}}</div></div>
-    <div class="stat-card yellow"><div class="stat-label">📊 O'rtacha</div><div class="stat-value">{{"{:,.0f}".format(ac)}}</div></div>
-    <div class="stat-card"><div class="stat-label">👥 Qarzdorlar</div><div class="stat-value">{{dc_}}</div></div></div>
-    <div class="card" style="margin-bottom:12px;"><h2 style="margin-bottom:12px;font-size:16px;">💸 Qarz holati</h2><div class="grid g2">
-    <div style="background:rgba(59,130,246,.1);border-radius:12px;padding:14px;"><div class="stat-label">Jami berilgan</div><div style="font-size:20px;font-weight:800;">{{"{:,.0f}".format(given)}} so'm</div></div>
-    <div style="background:rgba(16,185,129,.1);border-radius:12px;padding:14px;"><div class="stat-label">To'langan</div><div style="font-size:20px;font-weight:800;color:var(--green);">{{"{:,.0f}".format(paid_)}} so'm</div></div>
-    <div style="background:rgba(239,68,68,.1);border-radius:12px;padding:14px;grid-column:span 2;"><div class="stat-label">Qolgan qarz</div><div style="font-size:20px;font-weight:800;color:var(--red);">{{"{:,.0f}".format(rest)}} so'm</div></div></div></div>
-    <div class="grid g2"><div class="card"><h2 style="margin-bottom:12px;font-size:16px;">💳 To'lov turlari</h2>{%for x in bp%}<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><span>{{x.payment|upper}}</span><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(x.s)}}</span></div>{%else%}<p style="color:var(--dim);text-align:center;">Ma'lumot yo'q</p>{%endfor%}</div>
-    <div class="card"><h2 style="margin-bottom:12px;font-size:16px;">🏆 Top 5</h2>{%for x in tp%}<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);"><div><div style="font-weight:600;">{{x.name}}</div><div style="font-size:11px;color:var(--dim);">{{x.q}} dona</div></div><span style="color:var(--green);font-weight:700;">{{"{:,.0f}".format(x.s)}}</span></div>{%else%}<p style="color:var(--dim);text-align:center;">Hali savdo yo'q</p>{%endfor%}</div></div></div>""",
-    period=p,st=st,bp=bp,tp=tp,dc_=dc_,given=given,paid_=paid_,rest=rest,ac=ac)
+    db = get_db()
+    if not db:
+        return redirect("/dashboard")
+    
+    period = request.args.get("period", "day")
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    if period == "week":
+        date_filter = "created_at>=date('now','-7 days')"
+        period_label = "Haftalik"
+    elif period == "month":
+        date_filter = "created_at>=date('now','-30 days')"
+        period_label = "Oylik"
+    else:
+        date_filter = "date(created_at)='{}'".format(today)
+        period_label = "Bugungi"
+    
+    st = db.execute("SELECT COUNT(*) c, COALESCE(SUM(total),0) s FROM sales WHERE {}".format(date_filter)).fetchone()
+    total_sales = st["s"] if st else 0
+    total_count = st["c"] if st else 0
+    avg_check = total_sales / total_count if total_count > 0 else 0
+    
+    payments = db.execute("SELECT payment, COUNT(*) c, SUM(total) s FROM sales WHERE {} GROUP BY payment".format(date_filter)).fetchall()
+    
+    top_products = db.execute("SELECT p.name, SUM(si.qty) as qty, SUM(si.qty*si.price) as revenue FROM sale_items si JOIN products p ON p.id=si.product_id JOIN sales s ON s.id=si.sale_id WHERE {} GROUP BY si.product_id ORDER BY revenue DESC LIMIT 5".format(date_filter)).fetchall()
+    
+    debt_stats = db.execute("SELECT COUNT(*) c, COALESCE(SUM(total),0) t, COALESCE(SUM(paid),0) p FROM debts WHERE total>0").fetchone()
+    debt_count = debt_stats["c"] if debt_stats else 0
+    debt_total = debt_stats["t"] if debt_stats else 0
+    debt_paid = debt_stats["p"] if debt_stats else 0
+    debt_remaining = debt_total - debt_paid
+    
+    return RP("""<div style="padding:24px;max-width:1200px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+        <h1 style="font-size:28px;font-weight:800;">📈 Hisobotlar</h1>
+        <button onclick="window.print()" class="btn btn-primary">🖨️ Chop etish</button>
+    </div>
+    <div class="grid g3" style="margin-bottom:24px;">
+        <a href="?period=day" class="btn {%if period=='day'%}btn-primary{%else%}btn-gray{%endif%}" style="justify-content:center;padding:16px;">📅 Bugun</a>
+        <a href="?period=week" class="btn {%if period=='week'%}btn-primary{%else%}btn-gray{%endif%}" style="justify-content:center;padding:16px;">📆 Hafta</a>
+        <a href="?period=month" class="btn {%if period=='month'%}btn-primary{%else%}btn-gray{%endif%}" style="justify-content:center;padding:16px;">🗓️ Oy</a>
+    </div>
+    <div style="text-align:center;margin-bottom:24px;padding:12px;background:rgba(59,130,246,.1);border-radius:12px;">
+        <span style="color:var(--primary);font-weight:700;font-size:16px;">{{period_label}} hisobot</span>
+    </div>
+    <div class="grid g4" style="margin-bottom:24px;">
+        <div class="stat-card">
+            <div class="stat-label">💰 Jami savdo</div>
+            <div class="stat-value" style="color:var(--green);">{{"{:,.0f}".format(total_sales)}} so'm</div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-label">🧾 Cheklar soni</div>
+            <div class="stat-value">{{total_count}}</div>
+        </div>
+        <div class="stat-card yellow">
+            <div class="stat-label">📊 O'rtacha chek</div>
+            <div class="stat-value">{{"{:,.0f}".format(avg_check)}} so'm</div>
+        </div>
+        <div class="stat-card red">
+            <div class="stat-label">💸 Qarzdorlar</div>
+            <div class="stat-value">{{debt_count}}</div>
+        </div>
+    </div>
+    <div class="grid g2">
+        <div class="card">
+            <h2 style="margin-bottom:16px;font-size:18px;">💳 To'lov turlari</h2>
+            {%for p in payments%}
+            <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+                <div>
+                    {%if p.payment=='cash'%}<span class="badge badge-green">NAQD</span>
+                    {%elif p.payment=='card'%}<span class="badge badge-blue">KARTA</span>
+                    {%elif p.payment=='credit'%}<span class="badge badge-red">NASIYA</span>
+                    {%else%}<span class="badge badge-yellow">ARALASH</span>{%endif%}
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-weight:700;color:var(--green);">{{"{:,.0f}".format(p.s)}} so'm</div>
+                    <div style="font-size:12px;color:var(--dim);">{{p.c}} ta chek</div>
+                </div>
+            </div>
+            {%else%}
+            <p style="color:var(--dim);text-align:center;padding:20px;">Bu davrda savdo yo'q</p>
+            {%endfor%}
+        </div>
+        <div class="card">
+            <h2 style="margin-bottom:16px;font-size:18px;">🏆 Top 5 mahsulot</h2>
+            {%for p in top_products%}
+            <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);">
+                <div>
+                    <div style="font-weight:600;">{{p.name}}</div>
+                    <div style="font-size:12px;color:var(--dim);">{{p.qty}} dona sotilgan</div>
+                </div>
+                <div style="font-weight:700;color:var(--green);">{{"{:,.0f}".format(p.revenue)}} so'm</div>
+            </div>
+            {%else%}
+            <p style="color:var(--dim);text-align:center;padding:20px;">Bu davrda savdo yo'q</p>
+            {%endfor%}
+        </div>
+    </div>
+    {%if debt_count > 0%}
+    <div class="card" style="margin-top:24px;border-color:rgba(245,158,11,.3);">
+        <h2 style="margin-bottom:16px;font-size:18px;">💸 Qarz holati</h2>
+        <div class="grid g3">
+            <div style="background:rgba(59,130,246,.1);border-radius:12px;padding:16px;text-align:center;">
+                <div class="stat-label">Jami berilgan</div>
+                <div style="font-size:22px;font-weight:800;color:var(--primary);">{{"{:,.0f}".format(debt_total)}} so'm</div>
+            </div>
+            <div style="background:rgba(16,185,129,.1);border-radius:12px;padding:16px;text-align:center;">
+                <div class="stat-label">To'langan</div>
+                <div style="font-size:22px;font-weight:800;color:var(--green);">{{"{:,.0f}".format(debt_paid)}} so'm</div>
+            </div>
+            <div style="background:rgba(239,68,68,.1);border-radius:12px;padding:16px;text-align:center;">
+                <div class="stat-label">Qolgan qarz</div>
+                <div style="font-size:22px;font-weight:800;color:var(--red);">{{"{:,.0f}".format(debt_remaining)}} so'm</div>
+            </div>
+        </div>
+    </div>
+    {%endif%}
+    </div>""", period=period, period_label=period_label, today=today, total_sales=total_sales, total_count=total_count, avg_check=avg_check, payments=payments, top_products=top_products, debt_count=debt_count, debt_total=debt_total, debt_paid=debt_paid, debt_remaining=debt_remaining)
 
 # ═══════════════════════════════════════
 # 🤖 TELEGRAM BOT
 # ═══════════════════════════════════════
 def start_bot_thread():
-    if not BOT_TOKEN: print("⚠️ BOT_TOKEN yo'q"); return
+    if not BOT_TOKEN:
+        print("⚠️ BOT_TOKEN yo'q")
+        return
     try:
-
         import asyncio
         from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
         from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+        
         async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             user = update.effective_user
-            info = """🏪 <b>SmartStore POS</b> - Professional do'kon boshqaruvi
-
-<b>✨ Imkoniyatlar:</b>
-
-📦 <b>Mahsulotlar</b> — Shtrix-kod bilan qo'shish, qoldiqni kuzatish
-
-🛒 <b>Kassa</b> — Professional kamera (60 FPS), tezkor skaner
-
-🧾 <b>Sotuvlar</b> — Cheklar tarixi, PDF formatda
-
-💳 <b>Qarzdorlar</b> — Ism, telefon, to'lov qabul qilish
-
-🗄️ <b>Database</b> — Har kim o'z bazasini yaratadi, parol bilan himoyalangan
-
-━━━━━━━━━━━━━━━━━━━━
-
-👋 <b>{}</b>, xush kelibsiz!
-
-👇 Ilovani oching:""".format(user.full_name)
             app_url_with_user = APP_URL + "?tg_user=" + str(user.id)
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))],[InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
-            await update.message.reply_html(info, reply_markup=kb)
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚀 Ilovani ochish", web_app=WebAppInfo(url=app_url_with_user))], [InlineKeyboardButton("ℹ️ Yordam", callback_data="help")]])
+            await update.message.reply_html("👋 <b>{}</b>\n\n🏪 SmartStore POS\n\n👇 Ilovani oching:".format(user.full_name), reply_markup=kb)
+        
         async def cb_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            query = update.callback_query; await query.answer()
+            query = update.callback_query
+            await query.answer()
             await query.edit_message_text("ℹ️ Ilovani oching → Mahsulot qo'shing → Sotuv qiling\n\n🗄️ Baza sahifasida o'z bazangizni yarating!")
+        
         async def run_bot():
-            app_bot = Application.builder().token(BOT_TOKEN).build()
-            app_bot.add_handler(CommandHandler("start", cmd_start))
-            app_bot.add_handler(CallbackQueryHandler(cb_help, pattern="^help$"))
-            print("🤖 Telegram bot ishga tushdi!")
-            async with app_bot:
-                await app_bot.start()
+            while True:
                 try:
-                    await app_bot.updater.start_polling(drop_pending_updates=True)
-                    await asyncio.Event().wait()
+                    app_bot = Application.builder().token(BOT_TOKEN).build()
+                    app_bot.add_handler(CommandHandler("start", cmd_start))
+                    app_bot.add_handler(CallbackQueryHandler(cb_help, pattern="^help$"))
+                    print("🤖 Telegram bot ishga tushdi!")
+                    async with app_bot:
+                        await app_bot.start()
+                        await app_bot.updater.start_polling(drop_pending_updates=True)
+                        while True:
+                            await asyncio.sleep(10)
+                            if not app_bot.updater.running:
+                                raise Exception("Polling to'xtadi")
                 except Exception as e:
-                    print("⚠️ Bot polling xatosi:", e)
-        loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
+                    print("⚠️ Bot xatosi:", e, "- 10 soniyadan keyin qayta urinaman")
+                    await asyncio.sleep(10)
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         loop.run_until_complete(run_bot())
-    except Exception as e: print("❌ Bot xatosi:", e)
+    except Exception as e:
+        print("❌ Bot xatosi:", e)
 
 if __name__ == "__main__":
     print("🤖 Bot ishga tushmoqda...")
     threading.Thread(target=start_bot_thread, daemon=True).start()
-    print("="*50); print("🏪 SmartStore POS (Professional)"); print("="*50)
+    print("=" * 50)
+    print("🏪 SmartStore POS (Professional)")
+    print("=" * 50)
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
