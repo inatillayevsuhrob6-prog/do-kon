@@ -169,7 +169,23 @@ def db_page():
                     <span style="font-weight:700;font-size:16px;">🗄️ {{db.name}}</span>
                     <span class="badge badge-green" style="margin-left:8px;">👑 Egasi</span>
                 </div>
-                <a href="/db/switch/{{db.name}}" class="btn btn-primary btn-sm">O'tish</a>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+    <a href="/db/switch/{{db.name}}" class="btn btn-primary btn-sm">O'tish</a>
+
+    <a href="/db/edit/{{db.name}}" class="btn btn-gray btn-sm">
+        ✏️
+    </a>
+
+    <form method="POST"
+          action="/db/delete/{{db.name}}"
+          style="display:inline;"
+          onsubmit="return confirm('⚠️ {{db.name}} bazasi va uning ichidagi barcha ma\'lumotlar butunlay o\'chiriladi. Davom etasizmi?')">
+
+        <button type="submit" class="btn btn-red btn-sm">
+            🗑
+        </button>
+    </form>
+</div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(59,130,246,.1);border-radius:10px;">
                 <span style="font-size:12px;color:var(--dim);">🔑 Parol:</span>
@@ -298,6 +314,150 @@ def db_switch(db_name):
     session['db_name'] = db_name
     session['db_message'] = "Database '" + db_name + "' ga o'tildi!"
     return redirect("/dashboard")
+
+
+@app.route("/db/edit/<db_name>", methods=["GET", "POST"])
+def db_edit(db_name):
+    ensure_session_id()
+
+    registry = load_registry()
+    current_session = get_user_id()
+
+    if db_name not in registry:
+        return db_error("Baza topilmadi!")
+
+    entry = registry[db_name]
+
+    if entry.get("owner_session") != current_session:
+        return db_error("Faqat baza egasi tahrirlashi mumkin!")
+
+    if request.method == "POST":
+        new_name = request.form.get("db_name", "").strip().lower()
+        new_password = request.form.get("password", "")
+
+        if not re.match(r"^[a-zA-Z0-9_]+$", new_name):
+            return db_error("Noto'g'ri baza nomi!")
+
+        if len(new_password) < 4:
+            return db_error("Parol kamida 4 ta belgi bo'lsin!")
+
+        if new_name != db_name and new_name in registry:
+            return db_error("Bu nomdagi baza allaqachon mavjud!")
+
+        old_path = os.path.join(DATA_DIR, db_name + ".db")
+        new_path = os.path.join(DATA_DIR, new_name + ".db")
+
+        if not os.path.exists(old_path):
+            return db_error("Database fayli topilmadi!")
+
+        if new_name != db_name:
+            try:
+                os.rename(old_path, new_path)
+            except Exception as e:
+                return db_error("Baza nomini o'zgartirib bo'lmadi: " + str(e))
+
+            registry[new_name] = registry.pop(db_name)
+
+        registry[new_name]["password"] = new_password
+
+        save_registry(registry)
+
+        if session.get("db_name") == db_name:
+            session["db_name"] = new_name
+
+        session["db_message"] = "✅ Database tahrirlandi!"
+
+        return redirect("/db")
+
+    return RP("""
+<div style="padding:24px;max-width:600px;margin:0 auto;">
+    <div class="card">
+        <h1 style="font-size:22px;margin-bottom:24px;">
+            ✏️ Bazani tahrirlash
+        </h1>
+
+        <form method="POST">
+
+            <label style="font-size:13px;color:var(--dim);
+                          margin-bottom:6px;display:block;">
+                Database nomi
+            </label>
+
+            <input
+                class="input"
+                name="db_name"
+                value="{{ db_name }}"
+                required
+                pattern="[a-zA-Z0-9_]+"
+            >
+
+            <label style="font-size:13px;color:var(--dim);
+                          margin-bottom:6px;display:block;margin-top:14px;">
+                Yangi parol
+            </label>
+
+            <input
+                class="input"
+                name="password"
+                type="password"
+                minlength="4"
+                required
+            >
+
+            <button
+                class="btn btn-green"
+                style="width:100%;justify-content:center;
+                       margin-top:20px;padding:16px;">
+                💾 Saqlash
+            </button>
+
+            <a
+                href="/db"
+                class="btn btn-gray"
+                style="width:100%;justify-content:center;
+                       margin-top:10px;padding:16px;">
+                ← Orqaga
+            </a>
+
+        </form>
+    </div>
+</div>
+""", db_name=db_name)
+
+
+@app.route("/db/delete/<db_name>", methods=["POST"])
+def db_delete(db_name):
+    ensure_session_id()
+
+    registry = load_registry()
+    current_session = get_user_id()
+
+    if db_name not in registry:
+        return db_error("Baza topilmadi!")
+
+    entry = registry[db_name]
+
+    if entry.get("owner_session") != current_session:
+        return db_error("Faqat baza egasi o'chira oladi!")
+
+    if session.get("db_name") == db_name:
+        session.pop("db_name", None)
+
+    db_path = os.path.join(DATA_DIR, db_name + ".db")
+
+    try:
+        if os.path.exists(db_path):
+            os.remove(db_path)
+
+        registry.pop(db_name, None)
+        save_registry(registry)
+
+        session["db_message"] = "🗑️ Database '" + db_name + "' o'chirildi!"
+
+        return redirect("/db")
+
+    except Exception as e:
+        return db_error("Baza o'chirilmadi: " + str(e))
 
 @app.route("/db/disconnect")
 def db_disconnect():
