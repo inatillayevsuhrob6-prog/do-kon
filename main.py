@@ -617,7 +617,10 @@ def pos():
     function cq(i,d){C[i].qty=Math.max(1,C[i].qty+d);rc()}function cc(){C=[];rc()}
     async function ab(c){try{const r=await fetch('/api/product/by-barcode?code='+encodeURIComponent(c));if(!r.ok)throw 0;const p=await r.json();const x=C.find(y=>y.id===p.id);if(x)x.qty++;else C.push({...p,qty:1});if(document.getElementById('snd').checked)bp();rc()}catch{if(confirm('Topilmadi: '+c+'\\nYangi qo\\'shasizmi?'))location.href='/products/new?barcode='+encodeURIComponent(c)}}
     function bp(){try{const c=new(window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.1;o.start();o.stop(c.currentTime+.1)}catch{}}
-    async function ss(){
+    var torchTrack = null;
+var torchOn = false;
+
+async function ss(){
 if(sc) return;
 var region = document.getElementById('sr');
 region.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:var(--dim)">📷 Kamera yuklanmoqda...</div>';
@@ -633,44 +636,50 @@ var onOk = function(txt){
 };
 var onErr = function(){};
 
+// 🎯 YUQORI SIFAT config (60 FPS, 1080p) - HAMMA uchun
+var hq = {
+    fps: 60,
+    qrbox: {width: 260, height: 140},
+    videoConstraints: {
+        facingMode: "environment",
+        width: {ideal: 1920},
+        height: {ideal: 1080},
+        frameRate: {ideal: 60}
+    }
+};
+var sd = {fps: 30, qrbox: {width: 250, height: 150}};
+
 var ok = false;
+var cams = [];
 
-try {
-    await sc.start({facingMode: "environment"}, {fps: 30, qrbox: {width: 250, height: 150}}, onOk, onErr);
-    ok = true;
-} catch(e){}
-
-if(!ok){
-    try {
-        await sc.start(
-            {facingMode: {ideal: "environment"}, width: {ideal: 1920}, height: {ideal: 1080}, frameRate: {ideal: 60}},
-            {fps: 60, qrbox: {width: 260, height: 140}},
-            onOk, onErr
-        );
-        ok = true;
-    } catch(e){}
+// 📷 Kameralar ro'yxatini OLDIN olish
+try { cams = await Html5Qrcode.getCameras(); } catch(e){}
+var camId = null;
+if(cams.length){
+    camId = cams[0].id;
+    for(var i=0; i<cams.length; i++){
+        if(/back|rear|environment|orqa/i.test(cams[i].label || '')){ camId = cams[i].id; break; }
+    }
 }
 
-if(!ok){
-    try {
-        var cams = await Html5Qrcode.getCameras();
-        var camId = null;
-        if(cams.length){
-            camId = cams[0].id;
-            for(var i=0; i<cams.length; i++){
-                if(/back|rear|environment/i.test(cams[i].label || '')){ camId = cams[i].id; break; }
-            }
-            await sc.start(camId, {fps: 30, qrbox: {width: 250, height: 150}}, onOk, onErr);
-            ok = true;
-        }
-    } catch(e){}
+// 🛡 Bosqich 1: Orqa kamera + YUQORI SIFAT
+if(camId){
+    try { await sc.start(camId, hq, onOk, onErr); ok = true; console.log('✅ B1: orqa + HQ'); } catch(e){}
 }
 
+// 🛡 Bosqich 2: Environment + YUQORI SIFAT
 if(!ok){
-    try {
-        await sc.start({facingMode: "user"}, {fps: 30, qrbox: {width: 250, height: 150}}, onOk, onErr);
-        ok = true;
-    } catch(e){}
+    try { await sc.start({facingMode: "environment"}, hq, onOk, onErr); ok = true; console.log('✅ B2: env + HQ'); } catch(e){}
+}
+
+// 🛡 Bosqich 3: Environment + oddiy
+if(!ok){
+    try { await sc.start({facingMode: "environment"}, sd, onOk, onErr); ok = true; console.log('✅ B3: env oddiy'); } catch(e){}
+}
+
+// 🛡 Bosqich 4: Istalgan kamera
+if(!ok){
+    try { await sc.start(camId || {facingMode: "user"}, sd, onOk, onErr); ok = true; console.log('✅ B4: fallback'); } catch(e){}
 }
 
 if(!ok){
@@ -679,28 +688,65 @@ if(!ok){
     return;
 }
 
+// 🔆 FONAR + 🔍 AUTOFOKUS - ochilgandan KEYIN (hamma telefonda urinadi)
+torchTrack = null;
+torchOn = false;
 try {
     var video = document.querySelector('#sr video');
     if(video && video.srcObject){
         var track = video.srcObject.getTracks()[0];
-        if(track && track.getCapabilities){
-            var caps = track.getCapabilities();
-            var adv = {};
-            if(caps.torch){ adv.torch = true; }
-            if(caps.focusMode && caps.focusMode.indexOf('continuous') !== -1){
-                adv.focusMode = 'continuous';
-            }
-            if(Object.keys(adv).length > 0){
-                await track.applyConstraints({advanced: [adv]});
-            }
+        if(track){
+            torchTrack = track;
+            var caps = (track.getCapabilities) ? track.getCapabilities() : {};
+            // Avtofokus - xira bo'lmasin
+            try {
+                if(caps.focusMode && caps.focusMode.indexOf('continuous') !== -1){
+                    await track.applyConstraints({advanced: [{focusMode: 'continuous'}]});
+                    console.log('🔍 Autofokus yoqildi');
+                }
+            } catch(e){}
+            // Fonar - AVTO YONADI
+            try {
+                if(caps.torch){
+                    await track.applyConstraints({advanced: [{torch: true}]});
+                    torchOn = true;
+                    console.log('💡 Fonar AVTO yondi');
+                }
+            } catch(e){}
         }
     }
 } catch(e){}
 
 document.getElementById('sb').style.display = 'flex';
+showTorchBtn();
 }
 
-function xs(){if(sc){sc.stop().then(function(){sc.clear();sc=null});document.getElementById('sb').style.display='none'}}
+// 🔦 Fonar tugmasi (agar avto ishlamasa - qo'lda yoqadi)
+function showTorchBtn(){
+    var tb = document.getElementById('tb');
+    if(!tb){
+        tb = document.createElement('button');
+        tb.id = 'tb';
+        tb.className = 'btn btn-primary';
+        tb.style.cssText = 'width:100%;margin-top:8px;justify-content:center;';
+        tb.onclick = toggleTorch;
+        var sb = document.getElementById('sb');
+        sb.parentNode.insertBefore(tb, sb.nextSibling);
+    }
+    tb.innerHTML = torchOn ? '🔦 Fonar: YONIQ' : '🔦 Fonar';
+    tb.style.display = 'flex';
+}
+
+async function toggleTorch(){
+    if(!torchTrack){ alert('Bu telefonda fonar boshqarilmaydi'); return; }
+    try {
+        torchOn = !torchOn;
+        await torchTrack.applyConstraints({advanced: [{torch: torchOn}]});
+        document.getElementById('tb').innerHTML = torchOn ? '🔦 Fonar: YONIQ' : '🔦 Fonar';
+    } catch(e){ alert('Fonar yoqilmadi'); }
+}
+
+function xs(){if(sc){sc.stop().then(function(){sc.clear();sc=null});document.getElementById('sb').style.display='none';var tb=document.getElementById('tb');if(tb)tb.style.display='none';}}
 function ms(){const v=document.getElementById('mb').value.trim();if(v){ab(v);document.getElementById('mb').value=''}}
 document.getElementById('mb').addEventListener('keydown',function(e){if(e.key==='Enter')ms()});
 function oc(){if(!C.length){alert('Savat bosh!');return}document.getElementById('cm').classList.add('active')}
